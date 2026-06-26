@@ -1,3 +1,7 @@
+# Build trees
+build/
+cmake-build-*/
+
 # Prerequisites
 *.d
 
