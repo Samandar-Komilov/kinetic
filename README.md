@@ -2,15 +2,43 @@
   <picture>
     <source media="(prefers-color-scheme: dark)"
             srcset="data/logo/kinetic-logo-dark.png">
-    <img src="data/logo/kinetic-logo-light.png" height="56" alt="kinetic">
+    <img src="data/logo/kinetic-logo-light.png" height="72" alt="KinetiC">
   </picture>
 </p>
 
-# KinetiC
+<h1 align="center">KinetiC</h1>
 
-A high-performance, cross-platform HTTP/1.1 server in C — built incrementally, RFC by RFC, with you writing every layer.
+<p align="center">
+  High-performance, cross-platform <strong>HTTP/1.1</strong> server in C — built incrementally, RFC by RFC, with you writing every layer.
+</p>
 
-![Static Badge](https://img.shields.io/badge/version-0.0.1-purple)
+<p align="center">
+  <a href="https://github.com/Samandar-Komilov/kinetic/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://github.com/Samandar-Komilov/kinetic"><img src="https://img.shields.io/badge/version-0.1.0-7c3aed" alt="Version 0.1.0"></a>
+  <img src="https://img.shields.io/badge/status-early%20development-yellow" alt="Early development">
+  <img src="https://img.shields.io/badge/language-C-orange.svg" alt="Language: C">
+  <img src="https://img.shields.io/badge/standard-C17-00599C?logo=c&logoColor=white" alt="C17">
+  <img src="https://img.shields.io/badge/HTTP-1.1-007EC6" alt="HTTP/1.1">
+  <img src="https://img.shields.io/badge/RFC-9110%20%7C%209112-555" alt="RFC 9110 / 9112">
+  <img src="https://img.shields.io/badge/I%2FO-libuv-403C3D?logo=libuv&logoColor=white" alt="libuv">
+  <img src="https://img.shields.io/badge/config-YAML-cb171e?logo=yaml&logoColor=white" alt="YAML config">
+  <img src="https://img.shields.io/badge/build-CMake-064F8C?logo=cmake&logoColor=white" alt="CMake">
+  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey" alt="Cross-platform">
+</p>
+
+<p align="center">
+  <a href="docs/notebooks/README.md">Notebooks</a>
+  ·
+  <a href="docs/http1.1/INVARIANTS.md">HTTP invariants</a>
+  ·
+  <a href="configs/kinetic.yaml.example">Example config</a>
+  ·
+  <a href="https://github.com/Samandar-Komilov/kinetic/issues">Issues</a>
+  ·
+  <a href="LICENSE">License</a>
+</p>
+
+<br>
 
 ## Intro
 
