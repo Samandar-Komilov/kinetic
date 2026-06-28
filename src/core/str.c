@@ -38,7 +38,7 @@ bool ktc_str_eq_cstr(ktc_str a, const char *cstr) {
     return ktc_str_eq(a, ktc_str_from_cstr(cstr));
 }
 
-bool ktc_str_eq_ci(ktc_str a, ktc_str b) {
+bool ktc_str_eq_case_insensitive(ktc_str a, ktc_str b) {
     if (a.len != b.len) {
         return false;
     }

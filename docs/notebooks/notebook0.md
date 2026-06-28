@@ -247,7 +247,7 @@ Connection: close\r\n
 
 Sam **closes** after each response in Era 3 — persistence is [notebook 2](notebook2.md).
 
-Use `ktc_str_eq_ci` for header **name** comparison (`Host` vs `host`).
+Use `ktc_str_eq_case_insensitive` for header **name** comparison (`Host` vs `host`).
 
 ### Parser state machine (Eras 2–3)
 
