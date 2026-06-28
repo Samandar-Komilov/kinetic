@@ -1,11 +1,11 @@
-#include "kinetic/version.h"
+#include "ktc/version.h"
 
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 
 int main(void) {
-    const char *version = kinetic_version_string();
+    const char *version = ktc_version_string();
 
     assert(version != NULL);
     assert(strlen(version) > 0);

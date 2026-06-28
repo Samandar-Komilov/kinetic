@@ -1,39 +1,25 @@
 add_library(
-    kinetic_core
+    ktc_core
     STATIC
-    config.c
+    core/str.c
+    core/arena.c
     version.c
 )
 
 target_include_directories(
-    kinetic_core
+    ktc_core
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/../include"
 )
 
-target_link_libraries(
-    kinetic_core
-    PUBLIC
-        ${KINETIC_LIBCONFIG_TARGET}
-)
-
-kinetic_set_warnings(kinetic_core)
-
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
+kinetic_set_warnings(ktc_core)
 
 add_executable(kinetic main.c)
 
 target_link_libraries(
     kinetic
     PRIVATE
-        kinetic_core
-        ${KINETIC_LIBUV_TARGET}
-        Threads::Threads
+        ktc_core
 )
-
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_compile_definitions(kinetic PRIVATE _GNU_SOURCE)
-endif()
 
 kinetic_set_warnings(kinetic)

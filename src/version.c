@@ -1,5 +1,5 @@
-#include "kinetic/version.h"
+#include "ktc/version.h"
 
-const char *kinetic_version_string(void) {
+const char *ktc_version_string(void) {
     return "0.1.0";
 }

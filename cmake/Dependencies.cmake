@@ -1,7 +1,7 @@
 include(FetchContent)
 
 # ---------------------------------------------------------------------------
-# libuv
+# libuv — fetched or system; linked when you add networking in src/ (notebook 2+).
 # ---------------------------------------------------------------------------
 set(_kinetic_libuv_target "")
 
@@ -27,57 +27,7 @@ elseif(KINETIC_FETCH_DEPS)
     FetchContent_MakeAvailable(libuv)
     set(_kinetic_libuv_target uv_a)
 else()
-    message(FATAL_ERROR "libuv not found. Install libuv or set KINETIC_FETCH_DEPS=ON")
-endif()
-
-# ---------------------------------------------------------------------------
-# libconfig
-# ---------------------------------------------------------------------------
-set(_kinetic_libconfig_target "")
-
-find_package(libconfig CONFIG QUIET)
-if(TARGET libconfig::libconfig)
-    message(STATUS "Using CMake package libconfig::libconfig")
-    set(_kinetic_libconfig_target libconfig::libconfig)
-elseif(PkgConfig_FOUND)
-    pkg_check_modules(LIBCONFIG QUIET libconfig)
-    if(LIBCONFIG_FOUND)
-        message(STATUS "Using system libconfig via pkg-config")
-        add_library(kinetic_libconfig INTERFACE)
-        target_include_directories(kinetic_libconfig SYSTEM INTERFACE ${LIBCONFIG_INCLUDE_DIRS})
-        target_link_libraries(kinetic_libconfig INTERFACE ${LIBCONFIG_LIBRARIES})
-        set(_kinetic_libconfig_target kinetic_libconfig)
-    endif()
-endif()
-
-if(_kinetic_libconfig_target STREQUAL "" AND KINETIC_FETCH_DEPS)
-    message(STATUS "libconfig not found; fetching v1.7.3")
-    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(
-        libconfig
-        GIT_REPOSITORY https://github.com/hyperrealm/libconfig.git
-        GIT_TAG v1.7.3
-    )
-    FetchContent_MakeAvailable(libconfig)
-    if(TARGET config)
-        add_library(kinetic_libconfig_fetched INTERFACE)
-        target_link_libraries(kinetic_libconfig_fetched INTERFACE config)
-        target_include_directories(
-            kinetic_libconfig_fetched
-            SYSTEM
-            INTERFACE
-                "${libconfig_SOURCE_DIR}/lib"
-        )
-        set(_kinetic_libconfig_target kinetic_libconfig_fetched)
-    elseif(TARGET libconfig::libconfig)
-        set(_kinetic_libconfig_target libconfig::libconfig)
-    else()
-        message(FATAL_ERROR "Fetched libconfig but no known CMake target was exported")
-    endif()
-elseif(_kinetic_libconfig_target STREQUAL "")
-    message(FATAL_ERROR "libconfig not found. Install libconfig or set KINETIC_FETCH_DEPS=ON")
+    message(STATUS "libuv not found (optional until notebook 2)")
 endif()
 
 set(KINETIC_LIBUV_TARGET "${_kinetic_libuv_target}")
-set(KINETIC_LIBCONFIG_TARGET "${_kinetic_libconfig_target}")

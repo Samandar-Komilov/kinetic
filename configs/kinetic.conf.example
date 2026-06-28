@@ -1,7 +1,0 @@
-# Kinetic server configuration (libconfig syntax).
-# Copy to configs/kinetic.conf or pass a path on the command line.
-
-kinetic = {
-    name = "kinetic";
-    listen_port = 8080;
-};

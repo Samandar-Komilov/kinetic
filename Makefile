@@ -5,7 +5,7 @@ SHELL := /bin/bash
 BUILD_DIR   ?= build
 BUILD_TYPE  ?= Debug
 JOBS        ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-CONFIG      ?= configs/kinetic.conf.example
+CONFIG      ?= configs/kinetic.yaml.example
 BINARY      := $(BUILD_DIR)/src/kinetic
 CMAKE_FLAGS ?= -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
@@ -18,10 +18,7 @@ CLANG_TIDY   ?= clang-tidy
 CPPCHECK     ?= cppcheck
 
 # clang-tidy needs explicit includes when compile_commands.json uses GCC (/usr/bin/cc).
-LINT_CFLAGS := -I$(CURDIR)/include -std=c17 -D_GNU_SOURCE
-ifneq ($(wildcard $(BUILD_DIR)/_deps/libconfig-src/lib/libconfig.h),)
-LINT_CFLAGS += -isystem $(BUILD_DIR)/_deps/libconfig-src/lib
-endif
+LINT_CFLAGS := -I$(CURDIR)/include -std=c17
 
 .PHONY: help all configure build rebuild run test clean distclean \
         format format-check lint lint-cppcheck check tools
@@ -46,7 +43,7 @@ rebuild: ## Clean build tree and rebuild
 build-release: ## Configure and build with CMAKE_BUILD_TYPE=Release
 	$(MAKE) build BUILD_TYPE=Release
 
-run: build ## Run kinetic (CONFIG=…, default: example config)
+run: build ## Run kinetic (CONFIG=path/to/kinetic.yaml, default: example config)
 	./$(BINARY) $(CONFIG)
 
 test: build ## Run CTest suite
