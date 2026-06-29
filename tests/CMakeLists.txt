@@ -39,5 +39,3 @@ add_test(
     COMMAND kinetic
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
 )
-
-set_tests_properties(hello PROPERTIES PASS_REGULAR_EXPRESSION "KinetiC 0.1.0")

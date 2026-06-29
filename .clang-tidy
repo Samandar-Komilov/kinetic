@@ -30,5 +30,6 @@ Checks: >
   readability-uppercase-literal-suffix
 
 WarningsAsErrors: ''
-HeaderFilterRegex: '(include/ktc|src|tests)/.*'
+HeaderFilterRegex: '(include/ktc|src/core|tests)/.*'
+ExcludeHeaderFilterRegex: 'src/external/.*'
 FormatStyle: file

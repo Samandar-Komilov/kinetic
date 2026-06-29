@@ -1,10 +1,14 @@
-#include "ktc/version.h"
-
 #include <stdio.h>
+#include <stdlib.h>
+#include <uv.h>
 
-int main(void) {
-    printf("KinetiC %s\n", ktc_version_string());
-    printf("Core ready: ktc_str, ktc_arena\n");
-    printf("Next: follow docs/notebooks/notebook0.md\n");
+int main(int argc, char **argv) {
+    // 1. Draw state machines
+    // - UV event loop lifecycle
+    // - Request lifecycle
+    // - Connection lifecycle
+    (void)argc;
+    (void)argv;
+
     return 0;
 }

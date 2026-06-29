@@ -1,0 +1,18 @@
+CompileFlags:
+  CompilationDatabase: build
+
+Diagnostics:
+  UnusedIncludes: None
+  MissingIncludes: Strict
+
+---
+If:
+  PathMatch: src/external/.*
+Diagnostics:
+  Suppress: '*'
+
+---
+If:
+  PathMatch: data/examples/.*
+Diagnostics:
+  Suppress: '*'
