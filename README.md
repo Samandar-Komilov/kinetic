@@ -27,7 +27,7 @@
 </p>
 
 <p align="center">
-  <a href="docs/notebooks/README.md">Notebooks</a>
+  <a href="docs/tutorials/README.md">Tutorials</a>
   ·
   <a href="docs/http1.1/INVARIANTS.md">HTTP invariants</a>
   ·
@@ -87,8 +87,8 @@ An interactive dashboard in port 8098 work when you run kinetic. It shows core s
 include/ktc/core/     ktc_str, ktc_arena
 src/core/             implementations
 src/main.c            your entry point grows here
-configs/kinetic.yaml.example   minimal YAML (you parse in notebook 0 Era 1)
-docs/notebooks/       evolution story
+configs/kinetic.yaml.example   minimal YAML (you parse in tutorial T0 Era 1)
+docs/tutorials/       evolution story
 ```
 
 ## Requirements

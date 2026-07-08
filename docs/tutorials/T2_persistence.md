@@ -1,14 +1,14 @@
-# Notebook 2 — Sam keeps the door open
+# T2 — Persistence: Osman keeps the door open
 
-*Era 5. Every response carried `Connection: close`. Sam learns HTTP/1.1's default: the connection lives.*
+*Era 5. Every response carried `Connection: close`. Osman learns HTTP/1.1's default: the connection lives.*
 
-Continue from [Notebook 1 — Era 4](notebook1.md). Index: [README](README.md).
+Continue from [Tutorial T1 — Era 4](T1_bodies.md). Index: [README](README.md).
 
 ---
 
 ## Story
 
-Sam's server handles bodies correctly — but tears down TCP after each reply. Browsers and `curl` open a new connection for every request. That works; it is not how HTTP/1.1 is meant to run at scale.
+Osman's server handles bodies correctly — but tears down TCP after each reply. Browsers and `curl` open a new connection for every request. That works; it is not how HTTP/1.1 is meant to run at scale.
 
 A client sends two requests on **one** connection:
 
@@ -21,7 +21,7 @@ Host: localhost\r\n
 \r\n
 ```
 
-If Sam closes after the first response, the second never arrives on a fresh socket — fine. If Sam **keeps** the connection open but fails to **read the entire first request body** (notebook 1), leftover bytes become a corrupted second request-line — one of the oldest HTTP server bugs.
+If Osman closes after the first response, the second never arrives on a fresh socket — fine. If Osman **keeps** the connection open but fails to **read the entire first request body** (tutorial T1), leftover bytes become a corrupted second request-line — one of the oldest HTTP server bugs.
 
 Era 5 is about **persistence**: when to keep the connection, when to close, and how to shut down without RST-ing the client.
 
@@ -29,7 +29,7 @@ Era 5 is about **persistence**: when to keep the connection, when to close, and 
 
 ## RFC grounding (2–3 sections)
 
-| RFC | Section | What Sam must implement |
+| RFC | Section | What Osman must implement |
 |-----|---------|-------------------------|
 | [RFC 9112](https://www.rfc-editor.org/rfc/rfc9112.html) | **§9.3** | Persistent connections default for HTTP/1.1; **must read entire request body** or close |
 | [RFC 9112](https://www.rfc-editor.org/rfc/rfc9112.html) | **§9.6** | `Connection: close`; staged tear-down (half-close write, drain read) |
@@ -62,8 +62,8 @@ Era 5 is about **persistence**: when to keep the connection, when to close, and 
 **When to close:**
 
 - Client sends `Connection: close`.
-- Sam sends `Connection: close` (error paths, HTTP/1.0 client, unsupported persistence).
-- Framing error ([notebook 1](notebook1.md) smuggling cases).
+- Osman sends `Connection: close` (error paths, HTTP/1.0 client, unsupported persistence).
+- Framing error ([T1](T1_bodies.md) smuggling cases).
 - Idle timeout (implementation choice; RFC does not mandate length).
 
 ```text
@@ -87,9 +87,9 @@ Skipping drain risks client seeing RST instead of full response body.
 
 ---
 
-## What Sam must not do yet
+## What Osman must not do yet
 
-- **Pipelining** — multiple requests in flight before responses ([notebook 3](notebook3.md)). For Era 5, read one full request, send one response, then read the next.
+- **Pipelining** — multiple requests in flight before responses ([T3](T3_pipelining.md)). For Era 5, read one full request, send one response, then read the next.
 - Parallel handler threads on one connection.
 
 ---
@@ -98,15 +98,15 @@ Skipping drain risks client seeing RST instead of full response body.
 
 - [ ] Two sequential `GET`s on one connection → two **200** responses; no byte corruption.
 - [ ] `POST` with body on persistent conn — body fully drained before next request-line parsed.
-- [ ] Client `Connection: close` → Sam closes after that response; no further reads treated as new requests.
-- [ ] Sam `Connection: close` on error → connection ends.
+- [ ] Client `Connection: close` → Osman closes after that response; no further reads treated as new requests.
+- [ ] Osman `Connection: close` on error → connection ends.
 - [ ] 10 connect/request/response cycles without handle leak.
 - [ ] Regression: Era 3–4 tests still pass.
 
-**Sam's diary:** *The door stays open. I finish reading everything the client owed me before I listen for the next sentence.*
+**Osman's diary:** *The door stays open. I finish reading everything the client owed me before I listen for the next sentence.*
 
 ---
 
 ## Next
 
-[Notebook 3 — Pipelining](notebook3.md): client sends request B before response A — Sam must not reorder replies.
+[Tutorial T3 — Pipelining](T3_pipelining.md): client sends request B before response A — Osman must not reorder replies.

@@ -1,14 +1,14 @@
-# Notebook 3 — Sam serves a queue
+# T3 — Pipelining: Osman serves a queue
 
 *Era 6. The connection stays open. The client stops waiting — pipelining begins.*
 
-Continue from [Notebook 2 — Era 5](notebook2.md). Index: [README](README.md).
+Continue from [Tutorial T2 — Era 5](T2_persistence.md). Index: [README](README.md).
 
 ---
 
 ## Story
 
-Sam's server handles keep-alive. A impatient client sends:
+Osman's server handles keep-alive. A impatient client sends:
 
 ```http
 GET /a HTTP/1.1\r\n
@@ -19,7 +19,7 @@ Host: localhost\r\n
 \r\n
 ```
 
-…before reading either response. Two complete requests sit in the read buffer. Sam **must** parse them in order and **must** send **two** responses in the **same order** — even if `/b` would be faster to compute.
+…before reading either response. Two complete requests sit in the read buffer. Osman **must** parse them in order and **must** send **two** responses in the **same order** — even if `/b` would be faster to compute.
 
 Mis-associating response to request breaks caching, cookies, and every HTTP client library. Era 6 is about **ordering**, not throughput bragging.
 
@@ -27,7 +27,7 @@ Mis-associating response to request breaks caching, cookies, and every HTTP clie
 
 ## RFC grounding (2–3 sections)
 
-| RFC | Section | What Sam must implement |
+| RFC | Section | What Osman must implement |
 |-----|---------|-------------------------|
 | [RFC 9112](https://www.rfc-editor.org/rfc/rfc9112.html) | **§9.3.2** | Pipelined responses **MUST** match request order; parallel processing only for **safe** methods |
 | [RFC 9112](https://www.rfc-editor.org/rfc/rfc9112.html) | **§9.2** | Associate each response with the first outstanding request without a final response |
@@ -60,7 +60,7 @@ response queue:
   (even if handler for req2 finished before req1)
 ```
 
-**Pragmatic Era 6 for Sam:**
+**Pragmatic Era 6 for Osman:**
 
 1. **Phase A:** Parse requests sequentially from buffer; respond before reading next (no true pipeline) — validates parser reset between messages.
 2. **Phase B:** Allow multiple complete requests buffered; maintain FIFO response queue.
@@ -88,15 +88,15 @@ MESSAGE_COMPLETE → DISPATCH → RESPONSE_QUEUED → (when channel free) WRITE
 
 ---
 
-## What Sam gains after Era 6
+## What Osman gains after Era 6
 
-Sam is not production-complete — but the **wire core** is recognizable:
+Osman is not production-complete — but the **wire core** is recognizable:
 
 - Octet-accurate parsing through body
 - Keep-alive
 - Ordered pipelining for safe methods
 
-Era 7+ (future notebooks): method semantics (`HEAD`, `OPTIONS`, `POST`), `Expect: 100-continue`, full security audit, TLS, master/worker.
+Era 7+ (future tutorials): method semantics (`HEAD`, `OPTIONS`, `POST`), `Expect: 100-continue`, full security audit, TLS, master/worker.
 
 ---
 
@@ -108,13 +108,13 @@ Era 7+ (future notebooks): method semantics (`HEAD`, `OPTIONS`, `POST`), `Expect
 - [ ] No response reordering under parallel handler completion (if Phase C attempted).
 - [ ] Era 2–5 regression tests pass.
 
-**Sam's diary:** *They talk faster than I answer. I still reply in the order they spoke.*
+**Osman's diary:** *They talk faster than I answer. I still reply in the order they spoke.*
 
 ---
 
 ## Epilogue — toward prod
 
-Sam's evolution from [notebook 0](notebook0.md) Era 0 through Era 6 covers the **HTTP/1.1 messaging core**. What remains for a prod-ready server (each deserves its own notebook era):
+Osman's evolution from [T0](T0_foundation.md) Era 0 through Era 6 covers the **HTTP/1.1 messaging core**. What remains for a prod-ready server (each deserves its own tutorial era):
 
 | Era | Topic | RFC anchor |
 |-----|-------|------------|
@@ -125,4 +125,4 @@ Sam's evolution from [notebook 0](notebook0.md) Era 0 through Era 6 covers the *
 
 Full obligation list: [INVARIANTS.md](../http1.1/INVARIANTS.md).
 
-*The spec is long. Sam is no longer afraid of it.*
+*The spec is long. Osman is no longer afraid of it.*

@@ -1,14 +1,14 @@
-# Notebook 1 — Sam learns message bodies
+# T1 — Bodies: Osman learns message bodies
 
 *Era 4. Era 3 ended at the empty line after headers — no body, no `POST`. That changes now.*
 
-Continue from [Notebook 0 — Era 3](notebook0.md). Index: [README](README.md).
+Continue from [Tutorial T0 — Era 3](T0_foundation.md). Index: [README](README.md).
 
 ---
 
 ## Story
 
-Sam's server speaks HTTP/1.1 on the front half: request-line, headers, `Host`, a lawful `200` with `Connection: close`. Clients were polite — `GET` with no body.
+Osman's server speaks HTTP/1.1 on the front half: request-line, headers, `Host`, a lawful `200` with `Connection: close`. Clients were polite — `GET` with no body.
 
 Now a client sends:
 
@@ -20,15 +20,15 @@ Content-Length: 5\r\n
 hello
 ```
 
-After the header section's empty line, **five more octets** belong to this message. If Sam stops reading or mis-counts, the next request on a persistent connection (later) will parse garbage as a request-line — a smuggling-class bug.
+After the header section's empty line, **five more octets** belong to this message. If Osman stops reading or mis-counts, the next request on a persistent connection (later) will parse garbage as a request-line — a smuggling-class bug.
 
-Sam must learn **message body framing**: how many bytes follow the headers, and when there are none.
+Osman must learn **message body framing**: how many bytes follow the headers, and when there are none.
 
 ---
 
 ## RFC grounding (2–3 sections)
 
-| RFC | Section | What Sam must implement |
+| RFC | Section | What Osman must implement |
 |-----|---------|-------------------------|
 | [RFC 9112](https://www.rfc-editor.org/rfc/rfc9112.html) | **§6.2–§6.3** | `Content-Length`; **§6.3 precedence** — the ordered rules that decide body length |
 | [RFC 9112](https://www.rfc-editor.org/rfc/rfc9112.html) | **§7.1** | Chunked transfer coding — decode until zero chunk |
@@ -46,7 +46,7 @@ Sam must learn **message body framing**: how many bytes follow the headers, and 
 8. Request, none of above → body length **0**.
 9. Response, none of above → read until close (avoid for your responses).
 
-Sam does not invent a shortcut list. The RFC order **is** the state machine.
+Osman does not invent a shortcut list. The RFC order **is** the state machine.
 
 ---
 
@@ -93,7 +93,7 @@ read zero chunk + optional trailers + CRLF
 
 ## Responses with bodies (minimal)
 
-Era 3 sent `Content-Length: 0`. Now Sam may send a small body:
+Era 3 sent `Content-Length: 0`. Now Osman may send a small body:
 
 ```http
 HTTP/1.1 200 OK\r\n
@@ -111,10 +111,10 @@ OK
 
 ---
 
-## What Sam must not do yet
+## What Osman must not do yet
 
-- Keep-alive across requests ([notebook 2](notebook2.md)).
-- Pipelining ([notebook 3](notebook3.md)).
+- Keep-alive across requests ([T2](T2_persistence.md)).
+- Pipelining ([T3](T3_pipelining.md)).
 - Trailers (optional later; ignore unrecognized chunk extensions per `H11-CHUNK-002`).
 
 ---
@@ -128,10 +128,10 @@ OK
 - [ ] `GET` still works with no body (regression from Era 3).
 - [ ] Unit tests for §6.3 edge cases without live network.
 
-**Sam's diary:** *I know where the header ends and the body begins. Every octet is accounted for.*
+**Osman's diary:** *I know where the header ends and the body begins. Every octet is accounted for.*
 
 ---
 
 ## Next
 
-[Notebook 2 — Persistence](notebook2.md): stop closing after every response; drain bodies so the next request parses cleanly.
+[Tutorial T2 — Persistence](T2_persistence.md): stop closing after every response; drain bodies so the next request parses cleanly.

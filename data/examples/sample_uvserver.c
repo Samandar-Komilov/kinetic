@@ -349,7 +349,7 @@ int main(int argc, char **argv) {
  * Reference — what each piece does and why
  * =============================================================================
  *
- * This file is a teaching skeleton for notebook 0 Era 1. It is not production
+ * This file is a teaching skeleton for tutorial T0 Era 1. It is not production
  * HTTP yet — the "parser" is strstr for CRLFCRLF — but the libuv lifecycle is
  * real: bind, accept, read, write, half-close, signal drain, loop teardown.
  *
@@ -503,7 +503,7 @@ int main(int argc, char **argv) {
  *        pump the loop so close callbacks run. Required before uv_loop_close().
  *     6. uv_loop_close() — fails with EBUSY if any handle remains.
  *
- * ---- Era 1 checklist mapping (notebook0.md) ----
+ * ---- Era 1 checklist mapping (T0_foundation.md) ----
  *
  *   [x] Listen on a port (libuv uv_tcp_t)
  *   [x] Accept connections; one handle per client
