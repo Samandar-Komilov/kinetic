@@ -19,13 +19,14 @@
 ## Repository layout
 
 ```
-include/ktc/core/     str.h, arena.h
+include/ktc/core/     str.h, arena.h, config.h
 include/ktc/version.h
-src/core/             str.c, arena.c
+src/core/             str.c, arena.c, parseyml.c
 src/main.c            minimal entry (grows with tutorial T0)
 docs/tutorials/       README.md (index), T0_foundation.md … T3_pipelining.md
 docs/http1.1/         INVARIANTS.md
-configs/kinetic.yaml.example
+configs/example.yaml
+configs/test_config.yaml
 ```
 
 Library target: `ktc_core`. Binary: `kinetic`.

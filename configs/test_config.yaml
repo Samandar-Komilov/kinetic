@@ -1,0 +1,12 @@
+# Global Configuration
+global:
+  checkNewVersion: false
+
+# Log settings
+log:
+  level: INFO
+
+# Entry Points (Ports Kinetic listens on)
+entryPoints:
+  web:
+    address: ":8080"

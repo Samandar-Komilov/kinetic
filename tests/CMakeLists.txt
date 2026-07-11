@@ -34,8 +34,21 @@ kinetic_set_warnings(test_arena)
 
 add_test(NAME arena COMMAND test_arena)
 
+add_executable(test_config test_config.c)
+
+target_link_libraries(
+    test_config
+    PRIVATE
+        ktc_core
+)
+
+kinetic_set_warnings(test_config)
+
+add_test(NAME config COMMAND test_config)
+set_tests_properties(config PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/..")
+
 add_test(
     NAME hello
-    COMMAND kinetic
+    COMMAND python3 tests/test_hello.py
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
 )

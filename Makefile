@@ -5,12 +5,12 @@ SHELL := /bin/bash
 BUILD_DIR   ?= build
 BUILD_TYPE  ?= Debug
 JOBS        ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-CONFIG      ?= configs/kinetic.yaml.example
+CONFIG      ?= /etc/kinetic/kinetic.yaml
 BINARY      := $(BUILD_DIR)/src/kinetic
 CMAKE_FLAGS ?= -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 # Project sources only (never dependencies under build/ or vendored code).
-SOURCES := $(shell find include src tests -type f \( -name '*.c' -o -name '*.h' \) ! -path 'src/external/*' 2>/dev/null | sort)
+SOURCES := $(shell find include src tests -type f \( -name '*.c' -o -name '*.h' \) ! -path 'src/external/*' ! -path 'include/ktc/external/*' 2>/dev/null | sort)
 C_SOURCES := $(filter %.c,$(SOURCES))
 
 CLANG_FORMAT ?= clang-format

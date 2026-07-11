@@ -28,7 +28,7 @@ Everything else — bodies, persistence, pipelining, methods — comes in [T1](T
 These steps are **Eras 0–3**, not separate numbered tutorials:
 
 1. **Explore libuv** — loops, handles, `uv_tcp_t`, read callbacks (scratch programs OK).
-2. **Minimal YAML** — parse only `kinetic.name` and `listen_port` from [configs/kinetic.yaml.example](../../configs/kinetic.yaml.example).
+2. **Minimal YAML** — parse only `kinetic.name` and `listen_port` from [configs/example.yaml](../../configs/example.yaml).
 3. **Listen and read octets** — bind port, append bytes to a buffer, view as `ktc_str`.
 4. **Request-line parser** — incremental FSM through first CRLF.
 5. **Headers + Host + response** — full header section, then `HTTP/1.1 200`.

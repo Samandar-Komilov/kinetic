@@ -31,7 +31,7 @@
   ·
   <a href="docs/http1.1/INVARIANTS.md">HTTP invariants</a>
   ·
-  <a href="configs/kinetic.yaml.example">Example config</a>
+  <a href="configs/example.yaml">Example config</a>
   ·
   <a href="https://github.com/Samandar-Komilov/kinetic/issues">Issues</a>
   ·
@@ -84,10 +84,11 @@ An interactive dashboard in port 8098 work when you run kinetic. It shows core s
 ## Layout
 
 ```
-include/ktc/core/     ktc_str, ktc_arena
-src/core/             implementations
+include/ktc/core/     ktc_str, ktc_arena, config
+src/core/             implementations (str, arena, parseyml)
 src/main.c            your entry point grows here
-configs/kinetic.yaml.example   minimal YAML (you parse in tutorial T0 Era 1)
+configs/example.yaml   minimal YAML (you parse in tutorial T0 Era 1)
+configs/test_config.yaml test configuration with unprivileged port
 docs/tutorials/       evolution story
 ```
 

@@ -1,0 +1,47 @@
+# Global Configuration
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+# Log settings
+log:
+  level: INFO
+  format: common
+
+# API and Dashboard settings
+api:
+  dashboard: true
+  insecure: true # Accessible via port 8098 by default
+
+# Entry Points (Ports Kinetic listens on)
+entryPoints:
+  web:
+    address: ":80"
+    # Automatic global redirection to HTTPS
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+
+  websecure:
+    address: ":443"
+
+# Configuration Providers
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false # Safer: forces you to explicitly expose containers via labels
+  
+  file:
+    filename: "/etc/traefik/dynamic_config.yml"
+    watch: true # Reloads without restarting when the file changes
+
+# Certificate Resolvers (Let's Encrypt automated SSL)
+certificatesResolvers:
+  myresolver:
+    acme:
+      email: your-email@example.com
+      storage: "/etc/traefik/acme.json" # Permissions must be 600
+      httpChallenge:
+        entryPoint: web
