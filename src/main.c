@@ -9,6 +9,7 @@
 #include "ktc/core/arena.h"
 #include "ktc/core/config.h"
 #include "ktc/external/log.h"
+#include "ktc/http/body.h"
 #include "ktc/http/headers.h"
 #include "ktc/http/req_line.h"
 #include "ktc/http/response.h"
@@ -23,6 +24,7 @@ typedef struct {
 typedef enum {
     KTC_CONN_STATE_REQ_LINE,
     KTC_CONN_STATE_HEADERS,
+    KTC_CONN_STATE_BODY,
     KTC_CONN_STATE_COMPLETE,
     KTC_CONN_STATE_ERROR
 } ktc_conn_parse_state_t;
@@ -37,10 +39,16 @@ typedef struct ktc_conn_t {
     ktc_conn_parse_state_t parse_state;
     ktc_req_line_parser_t req_line_parser;
     ktc_header_parser_t header_parser;
+    ktc_body_parser_t body_parser;
 
     char *buf;
     size_t len;
     size_t cap;
+
+    // Request Payload accumulator
+    uint8_t *payload;
+    size_t payload_len;
+    size_t payload_cap;
 } ktc_conn_t;
 
 typedef struct {
@@ -56,6 +64,9 @@ static void on_handle_closed(uv_handle_t *h) {
     if (--c->pending_closes_cnt == 0) {
         if (c->buf) {
             free(c->buf);
+        }
+        if (c->payload) {
+            free(c->payload);
         }
         if (c->arena) {
             ktc_arena_destroy(c->arena);
@@ -205,9 +216,26 @@ static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
                                      (int)c->header_parser.host.len,
                                      (const char *)c->header_parser.host.ptr);
 
-                            c->parse_state = KTC_CONN_STATE_COMPLETE;
-                            uv_read_stop(stream);
-                            send_lawful_response(stream, c, 200, "OK");
+                            // Resolve body framing (H11-FRAME-001)
+                            ktc_body_parser_init(&c->body_parser);
+                            if (ktc_body_resolve_framing(&c->body_parser, &c->header_parser,
+                                                         c->req_line_parser.method)) {
+                                if (c->body_parser.framing == KTC_BODY_FRAMING_NONE) {
+                                    c->parse_state = KTC_CONN_STATE_COMPLETE;
+                                    uv_read_stop(stream);
+                                    send_lawful_response(stream, c, 200, "OK");
+                                } else {
+                                    c->parse_state = KTC_CONN_STATE_BODY;
+                                    c->payload = NULL;
+                                    c->payload_len = 0;
+                                    c->payload_cap = 0;
+                                }
+                            } else {
+                                log_error("Framing resolution failed (smuggling or invalid CL)");
+                                c->parse_state = KTC_CONN_STATE_ERROR;
+                                uv_read_stop(stream);
+                                send_lawful_response(stream, c, 400, "Bad Request");
+                            }
                         } else {
                             // Header validation failed (e.g. Host invariants)
                             int err_code = 400;
@@ -231,6 +259,57 @@ static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
                         c->parse_state = KTC_CONN_STATE_ERROR;
                         uv_read_stop(stream);
                         send_lawful_response(stream, c, err_code, phrase);
+                    }
+                }
+            }
+        }
+
+        // 3. Process Body
+        if (c->parse_state == KTC_CONN_STATE_BODY) {
+            size_t consumed = c->req_line_parser.bytes_consumed + c->header_parser.bytes_consumed +
+                              c->body_parser.body_consumed;
+            size_t unparsed_len = c->len - consumed;
+
+            if (unparsed_len > 0) {
+                // Grow payload buffer dynamically to fit read chunk
+                if (c->payload_len + unparsed_len > c->payload_cap) {
+                    size_t ncap = c->payload_cap ? c->payload_cap * 2 : 1024;
+                    while (ncap < c->payload_len + unparsed_len) {
+                        ncap *= 2;
+                    }
+                    uint8_t *np = realloc(c->payload, ncap);
+                    if (!np) {
+                        log_error("Payload buffer realloc failed");
+                        free(buf->base);
+                        conn_close(c);
+                        return;
+                    }
+                    c->payload = np;
+                    c->payload_cap = ncap;
+                }
+
+                bool feeding =
+                    ktc_body_parser_feed(&c->body_parser, (const uint8_t *)(c->buf + consumed),
+                                         unparsed_len, c->payload, &c->payload_len, c->payload_cap);
+                if (!feeding) {
+                    if (c->body_parser.framing == KTC_BODY_FRAMING_LENGTH &&
+                        c->body_parser.body_consumed == c->body_parser.content_length) {
+                        log_info("Body fully parsed (length=%zu)", c->payload_len);
+                        c->parse_state = KTC_CONN_STATE_COMPLETE;
+                        uv_read_stop(stream);
+                        send_lawful_response(stream, c, 200, "OK");
+                    } else if (c->body_parser.framing == KTC_BODY_FRAMING_CHUNKED &&
+                               c->body_parser.chunk_parser.state == KTC_CHUNK_STATE_COMPLETE) {
+                        log_info("Chunked body fully decoded (payload_len=%zu)", c->payload_len);
+                        c->parse_state = KTC_CONN_STATE_COMPLETE;
+                        uv_read_stop(stream);
+                        send_lawful_response(stream, c, 200, "OK");
+                    } else {
+                        log_error("Body parsing error. Framing: %d, FSM state: %d",
+                                  c->body_parser.framing, c->body_parser.chunk_parser.state);
+                        c->parse_state = KTC_CONN_STATE_ERROR;
+                        uv_read_stop(stream);
+                        send_lawful_response(stream, c, 400, "Bad Request");
                     }
                 }
             }
@@ -275,6 +354,10 @@ static void on_connection(uv_stream_t *server, int status) {
     c->buf = NULL;
     c->len = 0;
     c->cap = 0;
+
+    c->payload = NULL;
+    c->payload_len = 0;
+    c->payload_cap = 0;
 
     uv_tcp_init(app.loop, &c->client_handle);
     c->client_handle.data = c;
