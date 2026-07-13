@@ -71,6 +71,18 @@ kinetic_set_warnings(test_headers)
 
 add_test(NAME headers COMMAND test_headers)
 
+add_executable(test_body test_body.c)
+
+target_link_libraries(
+    test_body
+    PRIVATE
+        ktc_core
+)
+
+kinetic_set_warnings(test_body)
+
+add_test(NAME body COMMAND test_body)
+
 add_test(
     NAME hello
     COMMAND python3 tests/test_hello.py

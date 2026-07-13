@@ -7,6 +7,7 @@ add_library(
     http/req_line.c
     http/headers.c
     http/response.c
+    http/body.c
     external/log.c
     version.c
 )
