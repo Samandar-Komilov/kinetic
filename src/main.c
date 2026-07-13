@@ -9,7 +9,9 @@
 #include "ktc/core/arena.h"
 #include "ktc/core/config.h"
 #include "ktc/external/log.h"
+#include "ktc/http/headers.h"
 #include "ktc/http/req_line.h"
+#include "ktc/http/response.h"
 
 typedef struct {
     uv_loop_t *loop;
@@ -18,13 +20,24 @@ typedef struct {
     bool is_shutting_down;
 } ktc_app_t;
 
+typedef enum {
+    KTC_CONN_STATE_REQ_LINE,
+    KTC_CONN_STATE_HEADERS,
+    KTC_CONN_STATE_COMPLETE,
+    KTC_CONN_STATE_ERROR
+} ktc_conn_parse_state_t;
+
 typedef struct ktc_conn_t {
     uv_tcp_t client_handle;
     ktc_arena_t *arena;
     bool is_closing;
     int pending_closes_cnt;
 
-    ktc_req_line_parser_t parser;
+    // HTTP Parser State
+    ktc_conn_parse_state_t parse_state;
+    ktc_req_line_parser_t req_line_parser;
+    ktc_header_parser_t header_parser;
+
     char *buf;
     size_t len;
     size_t cap;
@@ -80,6 +93,32 @@ static void on_alloc(uv_handle_t *handle, size_t suggested, uv_buf_t *buf) {
     buf->len = buf->base ? suggested : 0;
 }
 
+static void send_lawful_response(uv_stream_t *stream, ktc_conn_t *c, int status_code,
+                                 const char *phrase) {
+    char response[1024];
+    size_t resp_len = ktc_response_format_empty(response, sizeof(response), status_code, phrase);
+    if (resp_len > 0) {
+        ktc_write_req_t *wr = malloc(sizeof(ktc_write_req_t));
+        if (wr) {
+            wr->base = malloc(resp_len + 1);
+            memcpy(wr->base, response, resp_len + 1);
+            wr->conn = c;
+            uv_buf_t wbuf = uv_buf_init(wr->base, (unsigned int)resp_len);
+            int r = uv_write(&wr->req, stream, &wbuf, 1, on_write);
+            if (r) {
+                log_error("uv_write failed: %s", uv_strerror(r));
+                free(wr->base);
+                free(wr);
+                conn_close(c);
+            }
+        } else {
+            conn_close(c);
+        }
+    } else {
+        conn_close(c);
+    }
+}
+
 static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
     ktc_conn_t *c = stream->data;
 
@@ -106,76 +145,93 @@ static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
         c->len += (size_t)nread;
         c->buf[c->len] = '\0';
 
-        // Feed bytes incrementally to HTTP start line parser
-        bool feeding = ktc_req_line_parser_feed(&c->parser, (const uint8_t *)(c->buf + prev_len),
-                                                (size_t)nread);
-        if (!feeding) {
-            if (c->parser.state == KTC_REQ_LINE_STATE_COMPLETE) {
-                ktc_req_line_parser_resolve(&c->parser, (const uint8_t *)c->buf);
-                log_info("Parsed request line: Method=%.*s, Target=%.*s, Version=%.*s",
-                         (int)c->parser.method.len, (const char *)c->parser.method.ptr,
-                         (int)c->parser.target.len, (const char *)c->parser.target.ptr,
-                         (int)c->parser.version.len, (const char *)c->parser.version.ptr);
+        // 1. Process Request Line
+        if (c->parse_state == KTC_CONN_STATE_REQ_LINE) {
+            bool feeding = ktc_req_line_parser_feed(
+                &c->req_line_parser, (const uint8_t *)(c->buf + prev_len), (size_t)nread);
+            if (!feeding) {
+                if (c->req_line_parser.state == KTC_REQ_LINE_STATE_COMPLETE) {
+                    ktc_req_line_parser_resolve(&c->req_line_parser, (const uint8_t *)c->buf);
+                    log_info("Parsed request line: Method=%.*s, Target=%.*s, Version=%.*s",
+                             (int)c->req_line_parser.method.len,
+                             (const char *)c->req_line_parser.method.ptr,
+                             (int)c->req_line_parser.target.len,
+                             (const char *)c->req_line_parser.target.ptr,
+                             (int)c->req_line_parser.version.len,
+                             (const char *)c->req_line_parser.version.ptr);
 
-                uv_read_stop(stream);
-
-                const char response[] = "HTTP/1.1 200 OK\r\n"
-                                        "Content-Length: 0\r\n"
-                                        "Connection: close\r\n"
-                                        "\r\n";
-                ktc_write_req_t *wr = malloc(sizeof(ktc_write_req_t));
-                if (wr) {
-                    wr->base = malloc(sizeof(response));
-                    memcpy(wr->base, response, sizeof(response));
-                    wr->conn = c;
-                    uv_buf_t wbuf = uv_buf_init(wr->base, sizeof(response) - 1);
-                    int r = uv_write(&wr->req, stream, &wbuf, 1, on_write);
-                    if (r) {
-                        log_error("uv_write failed: %s", uv_strerror(r));
-                        free(wr->base);
-                        free(wr);
-                        conn_close(c);
-                    }
+                    // Transition to Headers State
+                    c->parse_state = KTC_CONN_STATE_HEADERS;
+                    ktc_header_parser_init(&c->header_parser);
                 } else {
-                    conn_close(c);
-                }
-            } else {
-                // Parser syntax/grammar error encountered
-                const char *error_response = "HTTP/1.1 400 Bad Request\r\n"
-                                             "Content-Length: 0\r\n"
-                                             "Connection: close\r\n"
-                                             "\r\n";
-                if (c->parser.error == KTC_REQ_LINE_ERR_URI_TOO_LONG) {
-                    error_response = "HTTP/1.1 414 URI Too Long\r\n"
-                                     "Content-Length: 0\r\n"
-                                     "Connection: close\r\n"
-                                     "\r\n";
-                } else if (c->parser.error == KTC_REQ_LINE_ERR_METHOD_NOT_IMPLEMENTED) {
-                    error_response = "HTTP/1.1 501 Not Implemented\r\n"
-                                     "Content-Length: 0\r\n"
-                                     "Connection: close\r\n"
-                                     "\r\n";
-                }
-
-                log_error("Request line parser error: %d", c->parser.error);
-                uv_read_stop(stream);
-
-                ktc_write_req_t *wr = malloc(sizeof(ktc_write_req_t));
-                if (wr) {
-                    size_t resp_len = strlen(error_response);
-                    wr->base = malloc(resp_len + 1);
-                    memcpy(wr->base, error_response, resp_len + 1);
-                    wr->conn = c;
-                    uv_buf_t wbuf = uv_buf_init(wr->base, (unsigned int)resp_len);
-                    int r = uv_write(&wr->req, stream, &wbuf, 1, on_write);
-                    if (r) {
-                        log_error("uv_write failed: %s", uv_strerror(r));
-                        free(wr->base);
-                        free(wr);
-                        conn_close(c);
+                    // Request line error
+                    int err_code = 400;
+                    const char *phrase = "Bad Request";
+                    if (c->req_line_parser.error == KTC_REQ_LINE_ERR_URI_TOO_LONG) {
+                        err_code = 414;
+                        phrase = "URI Too Long";
+                    } else if (c->req_line_parser.error ==
+                               KTC_REQ_LINE_ERR_METHOD_NOT_IMPLEMENTED) {
+                        err_code = 501;
+                        phrase = "Not Implemented";
                     }
-                } else {
-                    conn_close(c);
+
+                    log_error("Request line parser error: %d", c->req_line_parser.error);
+                    c->parse_state = KTC_CONN_STATE_ERROR;
+                    uv_read_stop(stream);
+                    send_lawful_response(stream, c, err_code, phrase);
+                    free(buf->base);
+                    return;
+                }
+            }
+        }
+
+        // 2. Process Headers (if request line is parsed)
+        if (c->parse_state == KTC_CONN_STATE_HEADERS) {
+            size_t consumed = c->req_line_parser.bytes_consumed + c->header_parser.bytes_consumed;
+            size_t unparsed_len = c->len - consumed;
+
+            if (unparsed_len > 0) {
+                bool feeding = ktc_header_parser_feed(
+                    &c->header_parser, (const uint8_t *)(c->buf + consumed), unparsed_len);
+                if (!feeding) {
+                    if (c->header_parser.state == KTC_HEADER_STATE_COMPLETE) {
+                        bool valid = ktc_header_parser_resolve_and_validate(
+                            &c->header_parser,
+                            (const uint8_t *)(c->buf + c->req_line_parser.bytes_consumed),
+                            c->req_line_parser.target);
+                        if (valid) {
+                            log_info("Headers successfully parsed and validated. Host: %.*s",
+                                     (int)c->header_parser.host.len,
+                                     (const char *)c->header_parser.host.ptr);
+
+                            c->parse_state = KTC_CONN_STATE_COMPLETE;
+                            uv_read_stop(stream);
+                            send_lawful_response(stream, c, 200, "OK");
+                        } else {
+                            // Header validation failed (e.g. Host invariants)
+                            int err_code = 400;
+                            const char *phrase = "Bad Request";
+                            log_error("Header validation failed: %d", c->header_parser.error);
+
+                            c->parse_state = KTC_CONN_STATE_ERROR;
+                            uv_read_stop(stream);
+                            send_lawful_response(stream, c, err_code, phrase);
+                        }
+                    } else {
+                        // Header parser error (e.g. formatting error, obs-fold)
+                        int err_code = 400;
+                        const char *phrase = "Bad Request";
+                        if (c->header_parser.error == KTC_HEADER_ERR_TOO_LARGE) {
+                            err_code = 431;
+                            phrase = "Request Header Fields Too Large";
+                        }
+
+                        log_error("Header parser error: %d", c->header_parser.error);
+                        c->parse_state = KTC_CONN_STATE_ERROR;
+                        uv_read_stop(stream);
+                        send_lawful_response(stream, c, err_code, phrase);
+                    }
                 }
             }
         }
@@ -214,7 +270,8 @@ static void on_connection(uv_stream_t *server, int status) {
         return;
     }
 
-    ktc_req_line_parser_init(&c->parser);
+    c->parse_state = KTC_CONN_STATE_REQ_LINE;
+    ktc_req_line_parser_init(&c->req_line_parser);
     c->buf = NULL;
     c->len = 0;
     c->cap = 0;

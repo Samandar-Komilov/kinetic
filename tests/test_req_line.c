@@ -73,6 +73,39 @@ static void test_parse_method_too_long(void) {
     assert(parser.error == KTC_REQ_LINE_ERR_METHOD_NOT_IMPLEMENTED);
 }
 
+static void test_parse_invalid_method_chars(void) {
+    const char *raw = "GE[T] / HTTP/1.1\r\n";
+    ktc_req_line_parser_t parser;
+    ktc_req_line_parser_init(&parser);
+
+    bool feeding = ktc_req_line_parser_feed(&parser, (const uint8_t *)raw, strlen(raw));
+    assert(!feeding);
+    assert(parser.state == KTC_REQ_LINE_STATE_ERROR);
+    assert(parser.error == KTC_REQ_LINE_ERR_BAD_SYNTAX);
+}
+
+static void test_parse_invalid_version_crlf(void) {
+    const char *raw = "GET / HTTP/1.1\rX";
+    ktc_req_line_parser_t parser;
+    ktc_req_line_parser_init(&parser);
+
+    bool feeding = ktc_req_line_parser_feed(&parser, (const uint8_t *)raw, strlen(raw));
+    assert(!feeding);
+    assert(parser.state == KTC_REQ_LINE_STATE_ERROR);
+    assert(parser.error == KTC_REQ_LINE_ERR_BAD_SYNTAX);
+}
+
+static void test_parse_invalid_version_space(void) {
+    const char *raw = "GET / HTTP/1.1 \r\n";
+    ktc_req_line_parser_t parser;
+    ktc_req_line_parser_init(&parser);
+
+    bool feeding = ktc_req_line_parser_feed(&parser, (const uint8_t *)raw, strlen(raw));
+    assert(!feeding);
+    assert(parser.state == KTC_REQ_LINE_STATE_ERROR);
+    assert(parser.error == KTC_REQ_LINE_ERR_BAD_SYNTAX);
+}
+
 static void test_parse_incremental(void) {
     const char *part1 = "GET /index";
     const char *part2 = ".html HT";
@@ -115,6 +148,9 @@ int main(void) {
     test_parse_multiple_spaces();
     test_parse_uri_too_long();
     test_parse_method_too_long();
+    test_parse_invalid_method_chars();
+    test_parse_invalid_version_crlf();
+    test_parse_invalid_version_space();
     test_parse_incremental();
     printf("test_req_line: ok\n");
     return 0;
