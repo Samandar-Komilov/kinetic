@@ -19,7 +19,8 @@ def main():
         s.settimeout(2.0)
         s.connect(("127.0.0.1", 8080))
         
-        payload = b"GET / HTTP/1.1\r\n"
+        # Send HTTP request-line and verify response
+        payload = b"GET / HTTP/1.1\r\nHost: localhost:8080\r\n\r\n"
         s.sendall(payload)
         response = s.recv(1024)
         s.close()

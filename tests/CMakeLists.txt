@@ -59,6 +59,18 @@ kinetic_set_warnings(test_req_line)
 
 add_test(NAME req_line COMMAND test_req_line)
 
+add_executable(test_headers test_headers.c)
+
+target_link_libraries(
+    test_headers
+    PRIVATE
+        ktc_core
+)
+
+kinetic_set_warnings(test_headers)
+
+add_test(NAME headers COMMAND test_headers)
+
 add_test(
     NAME hello
     COMMAND python3 tests/test_hello.py
