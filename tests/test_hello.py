@@ -5,7 +5,6 @@ import sys
 import signal
 
 def main():
-    # Start the server with the test config
     proc = subprocess.Popen(
         ["./build/src/kinetic", "configs/test_config.yaml"],
         stdout=subprocess.PIPE,
@@ -13,37 +12,33 @@ def main():
         text=True
     )
     
-    # Wait a bit for the server to bind and start listening
     time.sleep(0.5)
     
     try:
-        # Connect to the echo server on port 8080
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(2.0)
         s.connect(("127.0.0.1", 8080))
         
-        # Send data and verify echo
-        payload = b"Hello Kinetic Echo Server!"
+        payload = b"GET / HTTP/1.1\r\n"
         s.sendall(payload)
-        response = s.recv(len(payload))
+        response = s.recv(1024)
         s.close()
         
         print(f"Sent: {payload}")
         print(f"Received: {response}")
         
-        if response != payload:
-            print("Error: Echo mismatch!", file=sys.stderr)
+        if b"HTTP/1.1 200 OK" not in response:
+            print("Error: Expected 200 OK!", file=sys.stderr)
             proc.terminate()
             sys.exit(1)
             
-        print("Echo test successful.")
+        print("HTTP parsing and response test successful.")
         
     except Exception as e:
         print(f"Connection/IO failed: {e}", file=sys.stderr)
         proc.terminate()
         sys.exit(1)
     finally:
-        # Gracefully terminate the server via SIGINT
         print("Sending SIGINT to server...")
         proc.send_signal(signal.SIGINT)
         try:

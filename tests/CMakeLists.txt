@@ -47,6 +47,18 @@ kinetic_set_warnings(test_config)
 add_test(NAME config COMMAND test_config)
 set_tests_properties(config PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
+add_executable(test_req_line test_req_line.c)
+
+target_link_libraries(
+    test_req_line
+    PRIVATE
+        ktc_core
+)
+
+kinetic_set_warnings(test_req_line)
+
+add_test(NAME req_line COMMAND test_req_line)
+
 add_test(
     NAME hello
     COMMAND python3 tests/test_hello.py
