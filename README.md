@@ -9,7 +9,7 @@
 <h1 align="center">KinetiC</h1>
 
 <p align="center">
-  High-performance, cross-platform <strong>HTTP/1.1</strong> server in C — built incrementally, RFC by RFC, with you writing every layer.
+  High-performance, cross-platform <strong>HTTP/1.1</strong> server in C — built incrementally, RFC by RFC.
 </p>
 
 <p align="center">

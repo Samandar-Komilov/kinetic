@@ -37,6 +37,7 @@ static void on_signal(uv_signal_t *handle, int signum) {
         return;
     }
     app.is_shutting_down = true;
+    ktc_connection_pool_destroy();
     log_info("Caught signal %d, stopping server and draining...", signum);
 
     if (!uv_is_closing((uv_handle_t *)&app.server)) {
@@ -85,6 +86,7 @@ int main(int argc, char **argv) {
 
     app.loop = uv_default_loop();
     app.is_shutting_down = false;
+    ktc_connection_pool_init();
 
     uv_tcp_init(app.loop, &app.server);
 
@@ -125,6 +127,7 @@ int main(int argc, char **argv) {
     uv_run(app.loop, UV_RUN_DEFAULT);
 
     uv_loop_close(app.loop);
+    ktc_connection_pool_destroy();
     log_info("Shutdown complete.");
 
     return 0;

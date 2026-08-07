@@ -11,7 +11,18 @@
 
 #define KTC_CONN_ARENA_INITIAL_SIZE 4096
 
+static bool global_pool_slot_states[KTC_MAX_CONNECTIONS];
 static bool g_shutting_down = false;
+static uint8_t *g_global_pool = NULL;
+
+void ktc_connection_pool_init(void) {
+    g_global_pool = malloc((size_t)KTC_MAX_CONNECTIONS * KTC_GLOBAL_POOL_SLOT_SIZE);
+}
+
+void ktc_connection_pool_destroy(void) {
+    free(g_global_pool);
+    g_global_pool = NULL;
+}
 
 typedef enum {
     KTC_CONN_STATE_REQ_LINE,
@@ -33,9 +44,9 @@ typedef struct ktc_conn_t {
     ktc_header_parser_t header_parser;
     ktc_body_parser_t body_parser;
 
-    char *buf;
+    uint8_t *slot; // points to connection's assigned 8KB slot in global pool
+    int slot_idx;
     size_t len;
-    size_t cap;
 
     // Request Payload accumulator
     uint8_t *payload;
@@ -53,11 +64,22 @@ void ktc_connections_set_shutting_down(bool is_shutting_down) {
     g_shutting_down = is_shutting_down;
 }
 
+static int find_free_slot(void) {
+    for (int i = 0; i < KTC_MAX_CONNECTIONS; i++) {
+        if (!global_pool_slot_states[i]) {
+            global_pool_slot_states[i] = true;
+            return i;
+        }
+    }
+
+    return -1;
+}
+
 static void on_handle_closed(uv_handle_t *h) {
     ktc_conn_t *c = h->data;
     if (--c->pending_closes_cnt == 0) {
-        if (c->buf) {
-            free(c->buf);
+        if (global_pool_slot_states[c->slot_idx]) {
+            global_pool_slot_states[c->slot_idx] = false;
         }
         if (c->payload) {
             free(c->payload);
@@ -94,14 +116,16 @@ static void on_write(uv_write_t *req, int status) {
 
 static void on_alloc(uv_handle_t *handle, size_t suggested, uv_buf_t *buf) {
     (void)handle;
+    (void)suggested;
     /*
      * Temporary Allocation: Before libuv reads from the socket, it invokes this
      * callback to request a buffer to write incoming network bytes into.
-     * 
-     * Note: Calling malloc here for every packet is a bottleneck that we accept for now. 
+     *
+     * Note: Calling malloc here for every packet is a bottleneck that we accept for now.
      */
-    buf->base = malloc(suggested);
-    buf->len = buf->base ? suggested : 0;
+    ktc_conn_t *c = handle->data;
+    buf->base = (char *)(c->slot + c->len);
+    buf->len = KTC_GLOBAL_POOL_SLOT_SIZE - c->len;
 }
 
 static void send_response(uv_stream_t *stream, ktc_conn_t *c, int status_code, const char *phrase) {
@@ -129,42 +153,11 @@ static void send_response(uv_stream_t *stream, ktc_conn_t *c, int status_code, c
     }
 }
 
-/*
- * TCP Stream Accumulation: Since TCP is a stream protocol, data can arrive fragmented
- * across multiple packets. We copy incoming chunks from libuv's temporary allocation
- * into this connection-bound buffer, resizing it dynamically to build a contiguous stream.
- * 
- * Note: Calling realloc here for every packet is a bottleneck that we accept for now. 
- */
-static bool accumulate_connection_buffer(ktc_conn_t *c, const char *data, size_t nread,
-                                         size_t *out_prev_len) {
-    if (c->len + nread + 1 > c->cap) {
-        size_t ncap = c->cap ? c->cap * 2 : 1024;
-        while (ncap < c->len + nread + 1) {
-            ncap *= 2;
-        }
-        char *nb = realloc(c->buf, ncap);
-        if (!nb) {
-            log_error("Buffer realloc failed");
-            return false;
-        }
-        c->buf = nb;
-        c->cap = ncap;
-    }
-
-    *out_prev_len = c->len;
-    memcpy(c->buf + c->len, data, nread);
-    c->len += nread;
-    c->buf[c->len] = '\0';
-    return true;
-}
-
 static void handle_request_line(ktc_conn_t *c, uv_stream_t *stream, size_t prev_len, size_t nread) {
-    bool feeding =
-        ktc_req_line_parser_feed(&c->req_line_parser, (const uint8_t *)(c->buf + prev_len), nread);
+    bool feeding = ktc_req_line_parser_feed(&c->req_line_parser, c->slot + prev_len, nread);
     if (!feeding) {
         if (c->req_line_parser.state == KTC_REQ_LINE_STATE_COMPLETE) {
-            ktc_req_line_parser_resolve(&c->req_line_parser, (const uint8_t *)c->buf);
+            ktc_req_line_parser_resolve(&c->req_line_parser, c->slot);
             if (c->req_line_parser.state == KTC_REQ_LINE_STATE_COMPLETE) {
                 log_info(
                     "Parsed request line: Method=%.*s, Target=%.*s, Version=%.*s",
@@ -211,13 +204,11 @@ static void handle_headers(ktc_conn_t *c, uv_stream_t *stream) {
     size_t unparsed_len = c->len - consumed;
 
     if (unparsed_len > 0) {
-        bool feeding = ktc_header_parser_feed(&c->header_parser,
-                                              (const uint8_t *)(c->buf + consumed), unparsed_len);
+        bool feeding = ktc_header_parser_feed(&c->header_parser, c->slot + consumed, unparsed_len);
         if (!feeding) {
             if (c->header_parser.state == KTC_HEADER_STATE_COMPLETE) {
                 bool valid = ktc_header_parser_resolve_and_validate(
-                    &c->header_parser,
-                    (const uint8_t *)(c->buf + c->req_line_parser.bytes_consumed),
+                    &c->header_parser, c->slot + c->req_line_parser.bytes_consumed,
                     c->req_line_parser.target);
                 if (valid) {
                     log_info("Headers successfully parsed and validated. Host: %.*s",
@@ -299,9 +290,8 @@ static void handle_body(ktc_conn_t *c, uv_stream_t *stream) {
             c->payload_cap = ncap;
         }
 
-        bool feeding =
-            ktc_body_parser_feed(&c->body_parser, (const uint8_t *)(c->buf + consumed),
-                                 unparsed_len, c->payload, &c->payload_len, c->payload_cap);
+        bool feeding = ktc_body_parser_feed(&c->body_parser, c->slot + consumed, unparsed_len,
+                                            c->payload, &c->payload_len, c->payload_cap);
         if (!feeding) {
             if (c->body_parser.framing == KTC_BODY_FRAMING_LENGTH &&
                 c->body_parser.body_consumed == c->body_parser.content_length) {
@@ -327,27 +317,18 @@ static void handle_body(ktc_conn_t *c, uv_stream_t *stream) {
 }
 
 static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
+    (void)buf;
     ktc_conn_t *c = stream->data;
 
     if (nread > 0) {
-        /*
-         * Packet Accumulation & Ownership: Copy the newly arrived packet fragment
-         * from libuv's temporary buffer (buf->base) into the connection-persistent
-         * buffer (c->buf). Once copied, the temporary buffer is freed immediately
-         * to prevent leaks.
-         */
-        size_t prev_len = 0;
-        if (!accumulate_connection_buffer(c, buf->base, (size_t)nread, &prev_len)) {
-            free(buf->base);
-            conn_close(c);
-            return;
-        }
+        size_t prev_len = c->len;
+        c->len += (size_t)nread;
+        c->slot[c->len] = '\0';
 
         // 1. Process Request Line
         if (c->parse_state == KTC_CONN_STATE_REQ_LINE) {
             handle_request_line(c, stream, prev_len, (size_t)nread);
             if (c->parse_state == KTC_CONN_STATE_ERROR || c->is_closing) {
-                free(buf->base);
                 return;
             }
         }
@@ -356,7 +337,6 @@ static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
         if (c->parse_state == KTC_CONN_STATE_HEADERS) {
             handle_headers(c, stream);
             if (c->parse_state == KTC_CONN_STATE_ERROR || c->is_closing) {
-                free(buf->base);
                 return;
             }
         }
@@ -365,19 +345,15 @@ static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
         if (c->parse_state == KTC_CONN_STATE_BODY) {
             handle_body(c, stream);
             if (c->parse_state == KTC_CONN_STATE_ERROR || c->is_closing) {
-                free(buf->base);
                 return;
             }
         }
-
-        free(buf->base);
     } else {
         if (nread == UV_EOF) {
             log_info("Client disconnected cleanly (EOF)");
         } else if (nread < 0) {
             log_error("Read error: %s", uv_strerror((int)nread));
         }
-        free(buf->base);
         conn_close(c);
     }
 }
@@ -400,19 +376,26 @@ void ktc_on_connection(uv_stream_t *server, int status) {
         return;
     }
 
+    int found_slot_idx = find_free_slot();
+    if (found_slot_idx == -1) {
+        log_error("Global pool slots exhausted");
+        free(c);
+        return;
+    }
+    c->slot = g_global_pool + ((ptrdiff_t)found_slot_idx * KTC_GLOBAL_POOL_SLOT_SIZE);
+    c->slot_idx = found_slot_idx;
+
     c->arena = ktc_arena_create(KTC_CONN_ARENA_INITIAL_SIZE);
     if (!c->arena) {
         log_error("Failed to create connection arena");
+        global_pool_slot_states[found_slot_idx] = false;
         free(c);
         return;
     }
 
     c->parse_state = KTC_CONN_STATE_REQ_LINE;
     ktc_req_line_parser_init(&c->req_line_parser);
-    // storage buffers are allocated on-demand
-    c->buf = NULL;
     c->len = 0;
-    c->cap = 0;
 
     c->payload = NULL;
     c->payload_len = 0;
