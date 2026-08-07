@@ -94,6 +94,12 @@ static void on_write(uv_write_t *req, int status) {
 
 static void on_alloc(uv_handle_t *handle, size_t suggested, uv_buf_t *buf) {
     (void)handle;
+    /*
+     * Temporary Allocation: Before libuv reads from the socket, it invokes this
+     * callback to request a buffer to write incoming network bytes into.
+     * 
+     * Note: Calling malloc here for every packet is a bottleneck that we accept for now. 
+     */
     buf->base = malloc(suggested);
     buf->len = buf->base ? suggested : 0;
 }
@@ -123,6 +129,13 @@ static void send_response(uv_stream_t *stream, ktc_conn_t *c, int status_code, c
     }
 }
 
+/*
+ * TCP Stream Accumulation: Since TCP is a stream protocol, data can arrive fragmented
+ * across multiple packets. We copy incoming chunks from libuv's temporary allocation
+ * into this connection-bound buffer, resizing it dynamically to build a contiguous stream.
+ * 
+ * Note: Calling realloc here for every packet is a bottleneck that we accept for now. 
+ */
 static bool accumulate_connection_buffer(ktc_conn_t *c, const char *data, size_t nread,
                                          size_t *out_prev_len) {
     if (c->len + nread + 1 > c->cap) {
@@ -317,6 +330,12 @@ static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
     ktc_conn_t *c = stream->data;
 
     if (nread > 0) {
+        /*
+         * Packet Accumulation & Ownership: Copy the newly arrived packet fragment
+         * from libuv's temporary buffer (buf->base) into the connection-persistent
+         * buffer (c->buf). Once copied, the temporary buffer is freed immediately
+         * to prevent leaks.
+         */
         size_t prev_len = 0;
         if (!accumulate_connection_buffer(c, buf->base, (size_t)nread, &prev_len)) {
             free(buf->base);
@@ -390,6 +409,7 @@ void ktc_on_connection(uv_stream_t *server, int status) {
 
     c->parse_state = KTC_CONN_STATE_REQ_LINE;
     ktc_req_line_parser_init(&c->req_line_parser);
+    // storage buffers are allocated on-demand
     c->buf = NULL;
     c->len = 0;
     c->cap = 0;
