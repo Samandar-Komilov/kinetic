@@ -4,16 +4,19 @@
 #include <stdbool.h>
 #include <uv.h>
 
+#define KTC_MAX_CONNECTIONS 1024
+#define KTC_GLOBAL_POOL_SLOT_SIZE 8096 // 8KB
+
 /**
- * @brief Callback invoked by libuv when a new incoming client connection is ready to be accepted.
- *
- * This function handles the connection lifecycle initiation. It allocates connection-specific
- * resources (such as the arena and buffers), accepts the client socket, sets TCP_NODELAY,
- * and starts reading request data from the client asynchronously.
- *
- * @param server The server stream handle listening for connections.
- * @param status 0 if a connection is ready, or a negative libuv error code on failure.
+ * @brief Allocates the global buffer pool for connection management.
  */
+void ktc_connection_pool_init(void);
+
+/**
+ * @brief Deallocates the global buffer pool.
+ */
+void ktc_connection_pool_destroy(void);
+
 void ktc_on_connection(uv_stream_t *server, int status);
 
 /**
