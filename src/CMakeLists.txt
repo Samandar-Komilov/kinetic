@@ -9,7 +9,6 @@ add_library(
     http/response.c
     http/body.c
     external/log.c
-    version.c
 )
 
 target_include_directories(
@@ -21,6 +20,7 @@ target_include_directories(
 )
 
 kinetic_set_warnings(ktc_core)
+target_compile_definitions(ktc_core PRIVATE _POSIX_C_SOURCE=200112L)
 
 target_link_libraries(
     ktc_core

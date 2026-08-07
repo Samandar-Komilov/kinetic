@@ -163,17 +163,33 @@ static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
             if (!feeding) {
                 if (c->req_line_parser.state == KTC_REQ_LINE_STATE_COMPLETE) {
                     ktc_req_line_parser_resolve(&c->req_line_parser, (const uint8_t *)c->buf);
-                    log_info("Parsed request line: Method=%.*s, Target=%.*s, Version=%.*s",
-                             (int)c->req_line_parser.method.len,
-                             (const char *)c->req_line_parser.method.ptr,
-                             (int)c->req_line_parser.target.len,
-                             (const char *)c->req_line_parser.target.ptr,
-                             (int)c->req_line_parser.version.len,
-                             (const char *)c->req_line_parser.version.ptr);
+                    if (c->req_line_parser.state == KTC_REQ_LINE_STATE_COMPLETE) {
+                        log_info("Parsed request line: Method=%.*s, Target=%.*s, Version=%.*s",
+                                 (int)c->req_line_parser.method.len,
+                                 (const char *)c->req_line_parser.method.ptr,
+                                 (int)c->req_line_parser.target.len,
+                                 (const char *)c->req_line_parser.target.ptr,
+                                 (int)c->req_line_parser.version.len,
+                                 (const char *)c->req_line_parser.version.ptr);
 
-                    // Transition to Headers State
-                    c->parse_state = KTC_CONN_STATE_HEADERS;
-                    ktc_header_parser_init(&c->header_parser);
+                        // Transition to Headers State
+                        c->parse_state = KTC_CONN_STATE_HEADERS;
+                        ktc_header_parser_init(&c->header_parser);
+                    } else {
+                        // Error during resolution (e.g. unsupported version)
+                        int err_code = 400;
+                        const char *phrase = "Bad Request";
+                        if (c->req_line_parser.error == KTC_REQ_LINE_ERR_VERSION_NOT_SUPPORTED) {
+                            err_code = 505;
+                            phrase = "HTTP Version Not Supported";
+                        }
+                        log_error("Request line resolution error: %d", c->req_line_parser.error);
+                        c->parse_state = KTC_CONN_STATE_ERROR;
+                        uv_read_stop(stream);
+                        send_lawful_response(stream, c, err_code, phrase);
+                        free(buf->base);
+                        return;
+                    }
                 } else {
                     // Request line error
                     int err_code = 400;
@@ -271,7 +287,17 @@ static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
             size_t unparsed_len = c->len - consumed;
 
             if (unparsed_len > 0) {
-                // Grow payload buffer dynamically to fit read chunk
+                // Grow payload buffer dynamically to fit read chunk, up to 10MB
+                size_t max_body_size = 10485760; // 10MB Cap
+                if (c->payload_len + unparsed_len > max_body_size) {
+                    log_error("Request body exceeds maximum size limit (10MB)");
+                    c->parse_state = KTC_CONN_STATE_ERROR;
+                    uv_read_stop(stream);
+                    send_lawful_response(stream, c, 413, "Content Too Large");
+                    free(buf->base);
+                    return;
+                }
+
                 if (c->payload_len + unparsed_len > c->payload_cap) {
                     size_t ncap = c->payload_cap ? c->payload_cap * 2 : 1024;
                     while (ncap < c->payload_len + unparsed_len) {
@@ -363,6 +389,7 @@ static void on_connection(uv_stream_t *server, int status) {
     c->client_handle.data = c;
 
     if (uv_accept(server, (uv_stream_t *)&c->client_handle) == 0) {
+        uv_tcp_nodelay(&c->client_handle, 1); // Enable TCP_NODELAY (Bug 9)
         uv_os_fd_t fd = -1;
         uv_fileno((uv_handle_t *)&c->client_handle, &fd);
         log_info("Accepted connection (fd=%d)", (int)fd);

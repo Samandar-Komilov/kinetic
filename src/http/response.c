@@ -6,7 +6,9 @@
 size_t ktc_response_format_empty(char *dest, size_t dest_len, int status, const char *phrase) {
     time_t rawtime;
     time(&rawtime);
-    struct tm *info = gmtime(&rawtime);
+    struct tm result;
+    // Use gmtime_r as gmtime is not reentrant (thread-safe) (Bug 10)
+    struct tm *info = gmtime_r(&rawtime, &result);
     if (!info) {
         return 0;
     }

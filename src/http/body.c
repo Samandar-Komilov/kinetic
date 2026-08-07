@@ -5,22 +5,12 @@
 #include <stdint.h>
 #include <string.h>
 
+#define KTC_MAX_BODY_SIZE 10485760 // 10MB Cap
+
 void ktc_body_parser_init(ktc_body_parser_t *parser) {
     memset(parser, 0, sizeof(*parser));
     parser->framing = KTC_BODY_FRAMING_NONE;
     parser->chunk_parser.state = KTC_CHUNK_STATE_SIZE;
-}
-
-static const uint8_t *custom_memrchr(const uint8_t *ptr, uint8_t c, size_t len) {
-    if (len == 0) {
-        return NULL;
-    }
-    for (size_t i = len; i > 0; i--) {
-        if (ptr[i - 1] == c) {
-            return ptr + (i - 1);
-        }
-    }
-    return NULL;
 }
 
 bool ktc_body_resolve_framing(ktc_body_parser_t *parser, const ktc_header_parser_t *header_parser,
@@ -58,32 +48,48 @@ bool ktc_body_resolve_framing(ktc_body_parser_t *parser, const ktc_header_parser
     }
 
     if (has_te) {
-        // Find the final coding token in Transfer-Encoding
-        const uint8_t *last_comma = custom_memrchr(te_val.ptr, ',', te_val.len);
-        ktc_str last_token = te_val;
-        if (last_comma) {
-            size_t offset = (size_t)(last_comma - te_val.ptr);
-            last_token = ktc_str_from(last_comma + 1, te_val.len - offset - 1);
+        // Validate that chunked is the final encoding and occurs exactly once (H11-FRAME-002 / Bug
+        // 3)
+        size_t start = 0;
+        bool seen_chunked = false;
+        bool last_was_chunked = false;
+
+        while (start < te_val.len) {
+            size_t end = start;
+            while (end < te_val.len && te_val.ptr[end] != ',') {
+                end++;
+            }
+
+            ktc_str token = ktc_str_from(te_val.ptr + start, end - start);
+            while (token.len > 0 && (token.ptr[0] == ' ' || token.ptr[0] == '\t')) {
+                token.ptr++;
+                token.len--;
+            }
+            while (token.len > 0 &&
+                   (token.ptr[token.len - 1] == ' ' || token.ptr[token.len - 1] == '\t')) {
+                token.len--;
+            }
+
+            if (ktc_str_eq_case_insensitive(token, ktc_str_from_cstr("chunked"))) {
+                if (seen_chunked) {
+                    return false; // chunked applied more than once
+                }
+                seen_chunked = true;
+                last_was_chunked = true;
+            } else {
+                last_was_chunked = false;
+            }
+
+            start = end + 1;
         }
 
-        // Trim spacing from final token
-        while (last_token.len > 0 && (last_token.ptr[0] == ' ' || last_token.ptr[0] == '\t')) {
-            last_token.ptr++;
-            last_token.len--;
-        }
-        while (last_token.len > 0 && (last_token.ptr[last_token.len - 1] == ' ' ||
-                                      last_token.ptr[last_token.len - 1] == '\t')) {
-            last_token.len--;
-        }
-
-        if (ktc_str_eq_case_insensitive(last_token, ktc_str_from_cstr("chunked"))) {
+        if (seen_chunked && last_was_chunked) {
             parser->framing = KTC_BODY_FRAMING_CHUNKED;
             parser->chunk_parser.state = KTC_CHUNK_STATE_SIZE;
-        } else {
-            // TE present but chunked is not final (H11-FRAME-002)
-            return false;
+            return true;
         }
-        return true;
+
+        return false; // chunked present but not final, or other encoding final
     }
 
     if (has_cl) {
@@ -101,6 +107,11 @@ bool ktc_body_resolve_framing(ktc_body_parser_t *parser, const ktc_header_parser
             }
             cl_len = next_val;
         }
+
+        if (cl_len > KTC_MAX_BODY_SIZE) {
+            return false; // Content-Length exceeds max body size cap (Bug 4)
+        }
+
         parser->framing = KTC_BODY_FRAMING_LENGTH;
         parser->content_length = cl_len;
         return true;
@@ -183,7 +194,7 @@ bool ktc_body_parser_feed(ktc_body_parser_t *parser, const uint8_t *data, size_t
         case KTC_CHUNK_STATE_SIZE_CRLF:
             if (c == '\n') {
                 if (cp->chunk_size == 0) {
-                    cp->state = KTC_CHUNK_STATE_TRAILERS;
+                    cp->state = KTC_CHUNK_STATE_TRAILERS_START;
                     cp->trailers_crlf_count = 0;
                     cp->last_was_cr = false;
                 } else {
@@ -222,26 +233,46 @@ bool ktc_body_parser_feed(ktc_body_parser_t *parser, const uint8_t *data, size_t
             }
             break;
 
-        case KTC_CHUNK_STATE_TRAILERS:
+        case KTC_CHUNK_STATE_TRAILERS_START:
             if (c == '\r') {
-                cp->last_was_cr = true;
-            } else if (c == '\n') {
-                if (cp->last_was_cr) {
-                    cp->trailers_crlf_count++;
-                    cp->last_was_cr = false;
-                    if (cp->trailers_crlf_count >= 1) {
-                        cp->state = KTC_CHUNK_STATE_COMPLETE;
-                        return false; // Finished chunked block
-                    }
-                } else {
-                    cp->state = KTC_CHUNK_STATE_ERROR;
-                    return false;
-                }
+                cp->state = KTC_CHUNK_STATE_TRAILERS_FINAL_LF;
+            } else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                       c == '-' || c == '_') {
+                // Start of trailer line field-name
+                cp->state = KTC_CHUNK_STATE_TRAILERS_DATA;
             } else {
-                cp->last_was_cr = false;
-                cp->trailers_crlf_count = 0;
+                cp->state = KTC_CHUNK_STATE_ERROR;
+                return false;
             }
             break;
+
+        case KTC_CHUNK_STATE_TRAILERS_DATA:
+            if (c == '\r') {
+                cp->state = KTC_CHUNK_STATE_TRAILERS_CRLF;
+            } else if (c < 0x20 || c == 0x7F) {
+                // Control character inside trailer line is invalid
+                cp->state = KTC_CHUNK_STATE_ERROR;
+                return false;
+            }
+            break;
+
+        case KTC_CHUNK_STATE_TRAILERS_CRLF:
+            if (c == '\n') {
+                cp->state = KTC_CHUNK_STATE_TRAILERS_START;
+            } else {
+                cp->state = KTC_CHUNK_STATE_ERROR;
+                return false;
+            }
+            break;
+
+        case KTC_CHUNK_STATE_TRAILERS_FINAL_LF:
+            if (c == '\n') {
+                cp->state = KTC_CHUNK_STATE_COMPLETE;
+                return false; // Finished chunked block successfully
+            } else {
+                cp->state = KTC_CHUNK_STATE_ERROR;
+                return false;
+            }
 
         default:
             cp->state = KTC_CHUNK_STATE_ERROR;

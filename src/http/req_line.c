@@ -7,6 +7,7 @@
 
 #define MAX_TARGET_LEN 8192
 #define MAX_METHOD_LEN 32
+#define MAX_PRE_REQUEST_JUNK 20
 
 static bool is_token_char(uint8_t c) {
     // RFC 9110 token characters:
@@ -37,9 +38,20 @@ bool ktc_req_line_parser_feed(ktc_req_line_parser_t *parser, const uint8_t *data
         switch (parser->state) {
         case KTC_REQ_LINE_STATE_IDLE:
             if (c == '\r') {
+                parser->skipped_leading++;
+                if (parser->skipped_leading > MAX_PRE_REQUEST_JUNK) {
+                    parser->state = KTC_REQ_LINE_STATE_ERROR;
+                    parser->error = KTC_REQ_LINE_ERR_BAD_SYNTAX;
+                    return false;
+                }
                 parser->state = KTC_REQ_LINE_STATE_SKIP_EMPTY;
             } else if (c == '\n') {
-                // if raw LF at start, stay in IDLE
+                parser->skipped_leading++;
+                if (parser->skipped_leading > MAX_PRE_REQUEST_JUNK) {
+                    parser->state = KTC_REQ_LINE_STATE_ERROR;
+                    parser->error = KTC_REQ_LINE_ERR_BAD_SYNTAX;
+                    return false;
+                }
             } else if (c == ' ' || c == '\t') {
                 // Leading space before method is invalid
                 parser->state = KTC_REQ_LINE_STATE_ERROR;
@@ -78,7 +90,7 @@ bool ktc_req_line_parser_feed(ktc_req_line_parser_t *parser, const uint8_t *data
                 }
                 if (parser->method_len > MAX_METHOD_LEN) {
                     parser->state = KTC_REQ_LINE_STATE_ERROR;
-                    parser->error = KTC_REQ_LINE_ERR_METHOD_NOT_IMPLEMENTED;
+                    parser->error = KTC_REQ_LINE_ERR_BAD_SYNTAX;
                     return false;
                 }
                 parser->state = KTC_REQ_LINE_STATE_TARGET;
@@ -170,6 +182,17 @@ void ktc_req_line_parser_resolve(ktc_req_line_parser_t *parser, const uint8_t *b
         parser->method = ktc_str_from(buf_base + parser->method_start, parser->method_len);
         parser->target = ktc_str_from(buf_base + parser->target_start, parser->target_len);
         parser->version = ktc_str_from(buf_base + parser->version_start, parser->version_len);
+
+        // Validate HTTP version format (H11-VERSION-001 / RFC 9112 §2.3)
+        // Must be exactly "HTTP/1.1" or "HTTP/1.0"
+        if (!ktc_str_eq_cstr(parser->version, "HTTP/1.1") &&
+            !ktc_str_eq_cstr(parser->version, "HTTP/1.0")) {
+            parser->state = KTC_REQ_LINE_STATE_ERROR;
+            parser->error = KTC_REQ_LINE_ERR_VERSION_NOT_SUPPORTED;
+            parser->method = ktc_str_null();
+            parser->target = ktc_str_null();
+            parser->version = ktc_str_null();
+        }
     } else {
         parser->method = ktc_str_null();
         parser->target = ktc_str_null();

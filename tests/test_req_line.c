@@ -70,7 +70,7 @@ static void test_parse_method_too_long(void) {
     bool feeding = ktc_req_line_parser_feed(&parser, (const uint8_t *)raw, strlen(raw));
     assert(!feeding);
     assert(parser.state == KTC_REQ_LINE_STATE_ERROR);
-    assert(parser.error == KTC_REQ_LINE_ERR_METHOD_NOT_IMPLEMENTED);
+    assert(parser.error == KTC_REQ_LINE_ERR_BAD_SYNTAX);
 }
 
 static void test_parse_invalid_method_chars(void) {
@@ -97,6 +97,42 @@ static void test_parse_invalid_version_crlf(void) {
 
 static void test_parse_invalid_version_space(void) {
     const char *raw = "GET / HTTP/1.1 \r\n";
+    ktc_req_line_parser_t parser;
+    ktc_req_line_parser_init(&parser);
+
+    bool feeding = ktc_req_line_parser_feed(&parser, (const uint8_t *)raw, strlen(raw));
+    assert(!feeding);
+    assert(parser.state == KTC_REQ_LINE_STATE_ERROR);
+    assert(parser.error == KTC_REQ_LINE_ERR_BAD_SYNTAX);
+}
+
+static void test_parse_unsupported_version(void) {
+    const char *raw = "GET / HTTP/2.0\r\n";
+    ktc_req_line_parser_t parser;
+    ktc_req_line_parser_init(&parser);
+
+    bool feeding = ktc_req_line_parser_feed(&parser, (const uint8_t *)raw, strlen(raw));
+    assert(!feeding);
+    assert(parser.state == KTC_REQ_LINE_STATE_COMPLETE);
+
+    ktc_req_line_parser_resolve(&parser, (const uint8_t *)raw);
+    assert(parser.state == KTC_REQ_LINE_STATE_ERROR);
+    assert(parser.error == KTC_REQ_LINE_ERR_VERSION_NOT_SUPPORTED);
+}
+
+static void test_parse_too_much_leading_junk(void) {
+    char raw[128];
+    memset(raw, 0, sizeof(raw));
+    size_t offset = 0;
+    for (int i = 0; i < 22; i++) {
+        memcpy(raw + offset, "\r\n", 2);
+        offset += 2;
+    }
+    const char *req = "GET / HTTP/1.1\r\n";
+    size_t req_len = strlen(req);
+    memcpy(raw + offset, req, req_len);
+    raw[offset + req_len] = '\0';
+
     ktc_req_line_parser_t parser;
     ktc_req_line_parser_init(&parser);
 
@@ -151,6 +187,8 @@ int main(void) {
     test_parse_invalid_method_chars();
     test_parse_invalid_version_crlf();
     test_parse_invalid_version_space();
+    test_parse_unsupported_version();
+    test_parse_too_much_leading_junk();
     test_parse_incremental();
     printf("test_req_line: ok\n");
     return 0;
