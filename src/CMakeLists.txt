@@ -4,6 +4,7 @@ add_library(
     core/str.c
     core/arena.c
     core/parseyml.c
+    core/connection.c
     http/req_line.c
     http/headers.c
     http/response.c
