@@ -44,8 +44,9 @@ typedef struct ktc_conn_t {
     ktc_header_parser_t header_parser;
     ktc_body_parser_t body_parser;
 
-    uint8_t *slot; // points to connection's assigned 8KB slot in global pool
-    int slot_idx;
+    // Connection buffer slot reference (borrowed on demand)
+    uint8_t *slot; // NULL if not borrowed
+    int slot_idx;  // -1 if not borrowed
     size_t len;
 
     // Request Payload accumulator
@@ -64,7 +65,7 @@ void ktc_connections_set_shutting_down(bool is_shutting_down) {
     g_shutting_down = is_shutting_down;
 }
 
-static int find_free_slot(void) {
+static int borrow_free_slot(void) {
     for (int i = 0; i < KTC_MAX_CONNECTIONS; i++) {
         if (!global_pool_slot_states[i]) {
             global_pool_slot_states[i] = true;
@@ -75,12 +76,19 @@ static int find_free_slot(void) {
     return -1;
 }
 
+static void release_conn_borrowed_slot(ktc_conn_t *c) {
+    if (c->slot_idx != -1) {
+        global_pool_slot_states[c->slot_idx] = false;
+        c->slot = NULL;
+        c->slot_idx = -1;
+        c->len = 0;
+    }
+}
+
 static void on_handle_closed(uv_handle_t *h) {
     ktc_conn_t *c = h->data;
     if (--c->pending_closes_cnt == 0) {
-        if (global_pool_slot_states[c->slot_idx]) {
-            global_pool_slot_states[c->slot_idx] = false;
-        }
+        release_conn_borrowed_slot(c);
         if (c->payload) {
             free(c->payload);
         }
@@ -121,9 +129,23 @@ static void on_alloc(uv_handle_t *handle, size_t suggested, uv_buf_t *buf) {
      * Temporary Allocation: Before libuv reads from the socket, it invokes this
      * callback to request a buffer to write incoming network bytes into.
      *
-     * Note: Calling malloc here for every packet is a bottleneck that we accept for now.
+     * Note: Malloc'ing for every chunk is a waste, we are using global pool slots.
      */
     ktc_conn_t *c = handle->data;
+
+    // Only acquire pool when needed
+    if (c->slot == NULL) {
+        int idx = borrow_free_slot();
+        if (idx == -1) {
+            // Pool exhausted
+            buf->base = NULL;
+            buf->len = 0;
+            return;
+        }
+        c->slot_idx = idx;
+        c->slot = g_global_pool + ((ptrdiff_t)idx * KTC_GLOBAL_POOL_SLOT_SIZE);
+    }
+
     buf->base = (char *)(c->slot + c->len);
     buf->len = KTC_GLOBAL_POOL_SLOT_SIZE - c->len;
 }
@@ -348,12 +370,17 @@ static void on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
                 return;
             }
         }
+        // Is parsing completed? || Is connection closing?
+        if (c->parse_state == KTC_CONN_STATE_COMPLETE || c->is_closing) {
+            release_conn_borrowed_slot(c);
+        }
     } else {
         if (nread == UV_EOF) {
             log_info("Client disconnected cleanly (EOF)");
         } else if (nread < 0) {
             log_error("Read error: %s", uv_strerror((int)nread));
         }
+        release_conn_borrowed_slot(c);
         conn_close(c);
     }
 }
@@ -376,19 +403,14 @@ void ktc_on_connection(uv_stream_t *server, int status) {
         return;
     }
 
-    int found_slot_idx = find_free_slot();
-    if (found_slot_idx == -1) {
-        log_error("Global pool slots exhausted");
-        free(c);
-        return;
-    }
-    c->slot = g_global_pool + ((ptrdiff_t)found_slot_idx * KTC_GLOBAL_POOL_SLOT_SIZE);
-    c->slot_idx = found_slot_idx;
+    // Slot is not immediately borrowed, instead it is done only when needed
+    c->slot = NULL;
+    c->slot_idx = -1;
+    c->len = 0;
 
     c->arena = ktc_arena_create(KTC_CONN_ARENA_INITIAL_SIZE);
     if (!c->arena) {
         log_error("Failed to create connection arena");
-        global_pool_slot_states[found_slot_idx] = false;
         free(c);
         return;
     }
