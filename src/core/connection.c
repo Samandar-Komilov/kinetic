@@ -111,6 +111,13 @@ static void conn_close(ktc_conn_t *c) {
     uv_close((uv_handle_t *)&c->client_handle, on_handle_closed);
 }
 
+static void on_shutdown(uv_shutdown_t *req, int status) {
+    (void)status;
+    ktc_conn_t *c = req->data;
+    free(req);
+    conn_close(c);
+}
+
 static void on_write(uv_write_t *req, int status) {
     ktc_write_req_t *wr = (ktc_write_req_t *)req;
     if (status < 0) {
@@ -119,7 +126,17 @@ static void on_write(uv_write_t *req, int status) {
     ktc_conn_t *c = wr->conn;
     free(wr->base);
     free(wr);
-    conn_close(c);
+
+    uv_shutdown_t *sr = malloc(sizeof(*sr));
+    if (sr) {
+        sr->data = c;
+        if (uv_shutdown(sr, (uv_stream_t *)&c->client_handle, on_shutdown) != 0) {
+            free(sr);
+            conn_close(c);
+        }
+    } else {
+        conn_close(c);
+    }
 }
 
 static void on_alloc(uv_handle_t *handle, size_t suggested, uv_buf_t *buf) {
@@ -179,7 +196,7 @@ static void handle_request_line(ktc_conn_t *c, uv_stream_t *stream, size_t prev_
     bool feeding = ktc_req_line_parser_feed(&c->req_line_parser, c->slot + prev_len, nread);
     if (!feeding) {
         if (c->req_line_parser.state == KTC_REQ_LINE_STATE_COMPLETE) {
-            ktc_req_line_parser_resolve(&c->req_line_parser, c->slot);
+            ktc_req_line_parser_verify(&c->req_line_parser, c->slot);
             if (c->req_line_parser.state == KTC_REQ_LINE_STATE_COMPLETE) {
                 log_info(
                     "Parsed request line: Method=%.*s, Target=%.*s, Version=%.*s",

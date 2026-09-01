@@ -65,6 +65,30 @@ static void test_cmp(void) {
     assert(ktc_str_cmp(ab, abc) < 0);
 }
 
+static void test_str_edge_cases(void) {
+    ktc_str s_null = ktc_str_null();
+    assert(ktc_str_is_empty(s_null));
+
+    ktc_str s_empty = ktc_str_from((const uint8_t *)"", 0);
+    assert(ktc_str_is_empty(s_empty));
+
+    // Case-insensitive comparisons on boundaries
+    ktc_str s_a = ktc_str_from_cstr("abcdefghijklmnopqrstuvwxyz");
+    ktc_str s_b = ktc_str_from_cstr("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    assert(ktc_str_eq_case_insensitive(s_a, s_b));
+
+    // Special characters comparison
+    ktc_str s_special1 = ktc_str_from_cstr("host-name_123");
+    ktc_str s_special2 = ktc_str_from_cstr("HOST-NAME_123");
+    assert(ktc_str_eq_case_insensitive(s_special1, s_special2));
+
+    // Non-ASCII symbols comparison should still match exactly if case is not changed,
+    // but check behavior on symbols like '[' and ']' which lie between 'Z' and 'a'.
+    ktc_str s_bracket1 = ktc_str_from_cstr("a[b");
+    ktc_str s_bracket2 = ktc_str_from_cstr("A[B");
+    assert(ktc_str_eq_case_insensitive(s_bracket1, s_bracket2));
+}
+
 int main(void) {
     test_null();
     test_from_cstr();
@@ -73,6 +97,7 @@ int main(void) {
     test_eq_cstr();
     test_eq_case_insensitive();
     test_cmp();
+    test_str_edge_cases();
     printf("test_str: ok\n");
     return 0;
 }

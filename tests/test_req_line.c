@@ -14,7 +14,7 @@ static void test_parse_success(void) {
     assert(parser.state == KTC_REQ_LINE_STATE_COMPLETE);
     assert(parser.error == KTC_REQ_LINE_ERR_NONE);
 
-    ktc_req_line_parser_resolve(&parser, (const uint8_t *)raw);
+    ktc_req_line_parser_verify(&parser, (const uint8_t *)raw);
     assert(ktc_str_eq_cstr(parser.method, "GET"));
     assert(ktc_str_eq_cstr(parser.target, "/index.html"));
     assert(ktc_str_eq_cstr(parser.version, "HTTP/1.1"));
@@ -29,7 +29,7 @@ static void test_parse_leading_crlf(void) {
     assert(!feeding);
     assert(parser.state == KTC_REQ_LINE_STATE_COMPLETE);
 
-    ktc_req_line_parser_resolve(&parser, (const uint8_t *)raw);
+    ktc_req_line_parser_verify(&parser, (const uint8_t *)raw);
     assert(ktc_str_eq_cstr(parser.method, "POST"));
     assert(ktc_str_eq_cstr(parser.target, "/submit"));
     assert(ktc_str_eq_cstr(parser.version, "HTTP/1.0"));
@@ -115,7 +115,7 @@ static void test_parse_unsupported_version(void) {
     assert(!feeding);
     assert(parser.state == KTC_REQ_LINE_STATE_COMPLETE);
 
-    ktc_req_line_parser_resolve(&parser, (const uint8_t *)raw);
+    ktc_req_line_parser_verify(&parser, (const uint8_t *)raw);
     assert(parser.state == KTC_REQ_LINE_STATE_ERROR);
     assert(parser.error == KTC_REQ_LINE_ERR_VERSION_NOT_SUPPORTED);
 }
@@ -172,7 +172,7 @@ static void test_parse_incremental(void) {
     assert(!feeding);
     assert(parser.state == KTC_REQ_LINE_STATE_COMPLETE);
 
-    ktc_req_line_parser_resolve(&parser, (const uint8_t *)buf);
+    ktc_req_line_parser_verify(&parser, (const uint8_t *)buf);
     assert(ktc_str_eq_cstr(parser.method, "GET"));
     assert(ktc_str_eq_cstr(parser.target, "/index.html"));
     assert(ktc_str_eq_cstr(parser.version, "HTTP/1.1"));

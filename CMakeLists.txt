@@ -14,6 +14,14 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(KINETIC_BUILD_TESTS "Build unit tests" ON)
 option(KINETIC_FETCH_DEPS "Fetch missing dependencies with FetchContent" ON)
+option(KINETIC_COVERAGE "Enable code coverage instrumentation" OFF)
+
+if(KINETIC_COVERAGE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        add_compile_options(--coverage)
+        add_link_options(--coverage)
+    endif()
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 

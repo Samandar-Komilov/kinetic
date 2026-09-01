@@ -87,6 +87,6 @@ bool ktc_req_line_parser_feed(ktc_req_line_parser_t *parser, const uint8_t *data
  * @param parser Pointer to the request line parser struct.
  * @param buf_base The starting base pointer of the accumulated network buffer.
  */
-void ktc_req_line_parser_resolve(ktc_req_line_parser_t *parser, const uint8_t *buf_base);
+void ktc_req_line_parser_verify(ktc_req_line_parser_t *parser, const uint8_t *buf_base);
 
 #endif /* KTC_HTTP_REQ_LINE_H */

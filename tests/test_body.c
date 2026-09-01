@@ -169,6 +169,30 @@ static void test_body_oversized_cl_rejection(void) {
     assert(!ok); // Rejected!
 }
 
+static void test_chunked_parser_errors(void) {
+    ktc_body_parser_t bp;
+    ktc_body_parser_init(&bp);
+    bp.framing = KTC_BODY_FRAMING_CHUNKED;
+
+    // 1. Invalid non-hex size character
+    const char *bad_size_chunk = "G\r\n";
+    uint8_t out[128];
+    size_t out_len = 0;
+    bool rem = ktc_body_parser_feed(&bp, (const uint8_t *)bad_size_chunk, strlen(bad_size_chunk),
+                                    out, &out_len, sizeof(out));
+    assert(!rem); // parsing aborted
+    assert(bp.chunk_parser.state == KTC_CHUNK_STATE_ERROR);
+
+    // 2. Overflowing chunk size
+    ktc_body_parser_init(&bp);
+    bp.framing = KTC_BODY_FRAMING_CHUNKED;
+    const char *overflow_chunk = "FFFFFFFFFFFFFFFFF\r\n"; // 17 hex digits triggers size overflow
+    rem = ktc_body_parser_feed(&bp, (const uint8_t *)overflow_chunk, strlen(overflow_chunk), out,
+                               &out_len, sizeof(out));
+    assert(!rem);
+    assert(bp.chunk_parser.state == KTC_CHUNK_STATE_ERROR);
+}
+
 int main(void) {
     test_body_resolve_none();
     test_body_resolve_length();
@@ -179,6 +203,7 @@ int main(void) {
     test_body_chunked_overflow();
     test_body_double_chunked_rejection();
     test_body_oversized_cl_rejection();
+    test_chunked_parser_errors();
     printf("test_body: ok\n");
     return 0;
 }

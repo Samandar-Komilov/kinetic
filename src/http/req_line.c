@@ -177,7 +177,7 @@ bool ktc_req_line_parser_feed(ktc_req_line_parser_t *parser, const uint8_t *data
     return true;
 }
 
-void ktc_req_line_parser_resolve(ktc_req_line_parser_t *parser, const uint8_t *buf_base) {
+void ktc_req_line_parser_verify(ktc_req_line_parser_t *parser, const uint8_t *buf_base) {
     if (parser->state == KTC_REQ_LINE_STATE_COMPLETE) {
         parser->method = ktc_str_from(buf_base + parser->method_start, parser->method_len);
         parser->target = ktc_str_from(buf_base + parser->target_start, parser->target_len);

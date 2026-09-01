@@ -76,3 +76,9 @@ add_test(
     COMMAND python3 tests/test_hello.py
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
 )
+
+# add_test(
+#     NAME concurrency
+#     COMMAND python3 tests/test_concurrency.py
+#     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+# )

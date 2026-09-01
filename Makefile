@@ -82,6 +82,17 @@ lint-cppcheck: tools
 
 check: format-check lint test
 
+coverage: ## Generate code coverage reports using gcov
+	cmake -B $(BUILD_DIR) $(CMAKE_FLAGS) -DKINETIC_COVERAGE=ON
+	cmake --build $(BUILD_DIR) -j $(JOBS)
+	ctest --test-dir $(BUILD_DIR) --output-on-failure
+	@printf '\n--- Coverage Summary ---\n'
+	@find $(BUILD_DIR)/src -name '*.gcda' | while read -r gcda; do \
+		gcov -n -o "$$(dirname "$$gcda")" "$$gcda"; \
+	done | grep -E "File|Lines executed"
+
+
+
 clean:
 	rm -rf $(BUILD_DIR)
 
