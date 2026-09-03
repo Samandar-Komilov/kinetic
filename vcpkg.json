@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.json",
+  "name": "kinetic",
+  "version-string": "0.1.0",
+  "description": "High-performance, cloud-native HTTP/1.1 server in C",
+  "homepage": "https://github.com/Samandar-Komilov/kinetic",
+  "license": "MIT",
+  "dependencies": [
+    "libuv",
+    "libyaml"
+  ]
+}

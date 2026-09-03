@@ -9,108 +9,136 @@
 <h1 align="center">KinetiC</h1>
 
 <p align="center">
-  High-performance, cross-platform <strong>HTTP/1.1</strong> server in C — built incrementally, RFC by RFC.
+  High-performance, cloud-native <strong>HTTP/1.1</strong> server & edge proxy in C17 — built with RFC invariant-based state machines and libuv.
 </p>
 
 <p align="center">
-  <a href="https://github.com/Samandar-Komilov/kinetic/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://github.com/Samandar-Komilov/kinetic"><img src="https://img.shields.io/badge/version-0.1.0-7c3aed" alt="Version 0.1.0"></a>
-  <img src="https://img.shields.io/badge/status-early%20development-yellow" alt="Early development">
-  <img src="https://img.shields.io/badge/language-C-orange.svg" alt="Language: C">
-  <img src="https://img.shields.io/badge/standard-C17-00599C?logo=c&logoColor=white" alt="C17">
+  <img src="https://img.shields.io/badge/status-in%20development-yellow" alt="In development">
+  <img src="https://img.shields.io/badge/language-C17-00599C?logo=c&logoColor=white" alt="C17">
   <img src="https://img.shields.io/badge/HTTP-1.1-007EC6" alt="HTTP/1.1">
   <img src="https://img.shields.io/badge/RFC-9110%20%7C%209112-555" alt="RFC 9110 / 9112">
   <img src="https://img.shields.io/badge/I%2FO-libuv-403C3D?logo=libuv&logoColor=white" alt="libuv">
-  <img src="https://img.shields.io/badge/config-YAML-cb171e?logo=yaml&logoColor=white" alt="YAML config">
-  <img src="https://img.shields.io/badge/build-CMake-064F8C?logo=cmake&logoColor=white" alt="CMake">
+  <img src="https://img.shields.io/badge/deps-vcpkg-064F8C" alt="vcpkg">
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey" alt="Cross-platform">
 </p>
 
 <p align="center">
-  <a href="docs/tutorials/README.md">Tutorials</a>
+  <a href="docs/STATE.md">State & Invariants</a>
   ·
-  <a href="docs/http1.1/INVARIANTS.md">HTTP invariants</a>
+  <a href="docs/http1.1/INVARIANTS.md">RFC Checklist</a>
   ·
   <a href="configs/example.yaml">Example config</a>
-  ·
-  <a href="https://github.com/Samandar-Komilov/kinetic/issues">Issues</a>
   ·
   <a href="LICENSE">License</a>
 </p>
 
 <br>
 
-## Intro
+## Overview
 
-KinetiC is **not** a continuation of our first try to build a web server ([cserve](github.com/Samandar-Komilov/cserve)). In cserve, we acted as a Product Owner with a set of features to implement, with time constraint. The features were implemented, the server worked, but it was not production ready, code was buggy, edge cases not handled. Later, when I explored RFCs deeper, I didn't met almost any of the official HTTP RFCs in cserve. That motivated me to rebuild a web server, this time fully following RFCs and invariant-based thinking. 
+**KinetiC** is a high-performance, cloud-native HTTP/1.1 web server and reverse proxy written in C17. It is designed from the ground up to achieve production-grade reliability by strictly implementing official IETF specifications (**RFC 9110** and **RFC 9112**) through deterministic state machines, non-owning memory slices, and zero-allocation parser design.
 
-## Architecture
+The ultimate goal of KinetiC is to serve as a fast, lightweight, cloud-native edge proxy (in the spirit of Traefik, but written in pure C), consuming Docker Unix domain sockets and Kubernetes API event streams for dynamic routing without server restarts.
 
-KinetiC is a web server written in C language, with CMake build system. The legendary language gives us build the system from scratch, understanding what is going on under the hood best. Also, HTTP server is a best way to practice invariant-based thinking with state machines. 
+---
 
-#### Concurrency model
+## Architecture & Core Design
 
-Concurrency is handled with [libuv](https://libuv.org/), cross-platform asynchronous I/O, trusted by Node.js. 
+* **Asynchronous I/O**: Event-driven networking using [`libuv`](https://libuv.org/) for non-blocking TCP socket operations (`uv_tcp_t`), stream allocation callbacks, and signal handling.
+* **Memory Management**: Fixed-size global slot pool for socket connections coupled with per-connection bump arenas (`ktc_arena`). Arenas are reset between requests on persistent connections to eliminate heap fragmentation.
+* **Zero-Copy Wire Octets**: Wire data is parsed using `ktc_str` slices (`{const uint8_t *ptr, size_t len}`), avoiding unnecessary string duplications during protocol header decoding.
+* **Multi-Worker Concurrency**: Scalable multi-process worker model leveraging `SO_REUSEPORT` to distribute TCP accepts cleanly across isolated `uv_loop_t` worker loops.
+* **Cloud-Native Provider Engine**: Designed to read static YAML configurations (`src/core/parseyml.c`) or dynamically update route tables by watching `/var/run/docker.sock` and Kubernetes API Ingress resources.
+* **Embedded Dashboard**: Integrated admin and observability engine running on port 8098 to visualize connection stats, request throughput, error rates, and backend health in real time.
 
-- **libuv** — one `uv_loop_t` per worker process; non-blocking TCP accept/read/write
-  on thousands of connections without one thread per client.
-- **Multi-process** — master/worker split is application-level (`fork` or
-  `SO_REUSEPORT`), not provided by libuv. Each worker runs its own isolated loop.
-- **Memory** — per-connection `ktc_arena`; `ktc_arena_reset()` between keep-alive
-  requests.
+---
 
-The following libuv APIs will help us throughout the development:
+## Main Development Phases
 
-| Era | APIs |
-|-----|------|
-| 1 — connection | `uv_loop_*`, `uv_tcp_*`, `uv_listen`, `uv_accept`, `uv_read_start`, `uv_write`, `uv_close` |
-| 3 — response | `uv_write` (response framing) |
-| 5 — persistence | `uv_shutdown`, `uv_timer_*` (idle timeout), staged close |
-| ops | `uv_signal_*` (graceful stop) |
+Below is the master roadmap of KinetiC's architectural milestones:
 
-#### Configuration
+- [x] **Phase 1: Infrastructure & Basement Layer**
+  - [x] C17 CMake build system and unit/integration test harness
+  - [x] `libuv` event loop and non-blocking TCP server setup
+  - [x] `libyaml` static configuration parsing engine
+  - [x] Memory management primitives (`ktc_arena` bump allocator, `ktc_str` octet slice)
+  - [x] `vcpkg` package manager integration (manifest mode)
+  - [x] Global connection pool slot allocator (`ktc_connection_pool_init`)
 
-Configuration is in YAML, aimed to achieve cloud native status like Traefik, moving away from 2000's nginx's static configuration system. 
+- [ ] **Phase 2: HTTP/1.1 Wire Parsing & RFC Invariants** *(In Progress)*
+  - [x] RFC 9112 §3 Request-line parser with grammar verification (`req_line.c`)
+  - [x] RFC 9112 §5 Header field parser and Host validation (`headers.c`)
+  - [x] RFC 9112 §6.3 Body framing precedence: `Content-Length` and `Transfer-Encoding: chunked` (`body.c`)
+  - [x] RFC 9110 status response generation (`response.c`)
+  - [ ] Strict enforcement of combined CL + TE request desynchronization guards
 
-#### Dashboard
+- [ ] **Phase 3: Connection Lifetime, Persistence & Pipelining**
+  - [ ] RFC 9112 §9.3 Persistent connection state machine (`IDLE` state transition loop)
+  - [ ] `Connection: close` request/response headers handling
+  - [ ] Connection idle timeout management via `uv_timer_t`
+  - [ ] RFC 9112 §9.3.2 FIFO response delivery queue for pipelined requests
 
-An interactive dashboard in port 8098 work when you run kinetic. It shows core stats of the web server: backends and their ports, requests count, throughput, error rate, etc. The dashboard APIs are also C-based, UI is pure HTML & CSS & JS.
+- [ ] **Phase 4: HTTP Method Semantics & Protocol Extensions**
+  - [ ] `HEAD` method response body suppression
+  - [ ] `OPTIONS` method capability reporting (`Allow` header)
+  - [ ] RFC 9110 §10.1.1 `Expect: 100-continue` intermediate status handling
+  - [ ] RFC 9111 Conditional GET validation (`ETag`, `If-None-Match`, `304 Not Modified`)
+  - [ ] RFC 9110 §8.4 Content Coding (`gzip` response compression)
 
-## Installation
+- [ ] **Phase 5: Multi-Worker Process Architecture**
+  - [ ] `SO_REUSEPORT` kernel socket load balancing across worker processes
+  - [ ] Master-worker process lifecycle, IPC channels, and health monitoring
+  - [ ] Graceful SIGINT/SIGTERM drain sequence across all active loops
 
->[!NOTE]
->The app will be installable via popular linux package managers (e.g. `apt`/`dnf`) and docker, once we achieve 0.2.0 version.
+- [ ] **Phase 6: Cloud-Native Interfacing (Docker & Kubernetes)**
+  - [ ] Docker Unix Domain Socket listener (`/var/run/docker.sock`) for container events
+  - [ ] Kubernetes API Server event watcher over TLS & JSON parsing (`yyjson`)
+  - [ ] Lock-free atomic routing graph update mechanism
 
-## Layout
+- [ ] **Phase 7: Observability & Interactive Dashboard Server**
+  - [ ] Embedded metrics collector (request throughput, latency histograms, error rates)
+  - [ ] Built-in HTTP admin server and interactive dashboard on port 8098
 
+---
+
+## Repository Structure
+
+```text
+include/ktc/core/     Public headers: str.h, arena.h, config.h, connection.h
+include/ktc/http/     HTTP parser headers: req_line.h, headers.h, body.h, response.h
+src/core/             Core implementations (str.c, arena.c, parseyml.c, connection.c)
+src/http/             HTTP parsers (req_line.c, headers.c, body.c, response.c)
+src/main.c            Main entry point & libuv loop initialization
+configs/              YAML configuration files
+docs/                 Documentation: STATE.md, INVARIANTS.md
+tests/                Unit and integration test suites
+vcpkg.json            vcpkg package manifest
 ```
-include/ktc/core/     ktc_str, ktc_arena, config
-src/core/             implementations (str, arena, parseyml)
-src/main.c            your entry point grows here
-configs/example.yaml   minimal YAML (you parse in tutorial T0 Era 1)
-configs/test_config.yaml test configuration with unprivileged port
-docs/tutorials/       evolution story
-```
 
-## Requirements
+---
 
-- CMake 3.20+, C17
-- libuv / libyaml
+## Build & Verify
 
-## Build
+### Requirements
+* **CMake 3.20+**
+* **C17 Compiler** (`gcc` or `clang`)
+* **libuv** and **libyaml** (provided via system packages, vcpkg, or FetchContent)
 
+### Build & Run
 ```bash
+# Build binary
 make build
-make test
-./build/src/kinetic
-```
 
-## Format & lint
-
-```bash
-make format
+# Run unit and integration tests
 make check
+
+# Start KinetiC server
+./build/src/kinetic configs/test_config.yaml
 ```
+
+---
 
 ## License
 
