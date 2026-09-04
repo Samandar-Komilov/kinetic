@@ -6,11 +6,12 @@ This document is the **normative checklist** for KinetiC’s HTTP/1.1 implementa
 
 | Document | Role |
 |----------|------|
-| [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html) | HTTP semantics (methods, status codes, fields, content, conditionals) |
+| [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html) | HTTP Semantics (methods, status codes, fields, content) |
 | [RFC 9112](https://www.rfc-editor.org/rfc/rfc9112.html) | HTTP/1.1 message syntax, framing, connection management |
-| [RFC 9111](https://www.rfc-editor.org/rfc/rfc9111.html) | HTTP caching (when serving cacheable responses) |
 | [RFC 9117](https://www.rfc-editor.org/rfc/rfc9117.html) | `Expect: 100-continue` |
 | [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119.html) / [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174.html) | Meaning of MUST, SHOULD, MAY |
+
+*(Note: HTTP Caching is defined separately under [CACHING.md](CACHING.md) per RFC 9111).*
 
 **Obsoleted but historically relevant:** RFC 7230–7235, RFC 2616 (superseded by the 911x series, June 2022).
 
@@ -344,7 +345,7 @@ These are **implementation contracts** for KinetiC’s incremental parser (to be
 The following are **out of scope** for HTTP/1.1 wire compliance unless a later doc says otherwise:
 
 - HTTP/2, HTTP/3 ([RFC 9113](https://www.rfc-editor.org/rfc/rfc9113.html), [RFC 9114](https://www.rfc-editor.org/rfc/rfc9114.html))
-- Full cache proxy behavior ([RFC 9111](https://www.rfc-editor.org/rfc/rfc9111.html)) — only origin-server obligations touched here
+- Full HTTP caching & proxy cache store behavior (see [CACHING.md](CACHING.md) / [RFC 9111](https://www.rfc-editor.org/rfc/rfc9111.html))
 - WebSocket handshake (uses Upgrade but is defined elsewhere)
 - Optional extensions: trailers, compression transfer codings beyond `chunked`, upgrade to non-HTTP protocols
 

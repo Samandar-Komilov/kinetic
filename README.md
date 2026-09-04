@@ -27,8 +27,6 @@
 <p align="center">
   <a href="docs/STATE.md">Project State</a>
   ·
-  <a href="docs/invariants/HTTP_1_1.md">RFC Invariants Checklist</a>
-  ·
   <a href="configs/example.yaml">Example config</a>
   ·
   <a href="LICENSE">License</a>
@@ -131,12 +129,31 @@ vcpkg.json            vcpkg package manifest
 # Build binary
 make build
 
-# Run unit and integration tests
+# Run unit tests only
+make test-u
+
+# Run integration tests only
+make test-i
+
+# Run full CI check (format-check + clang-tidy + tests)
 make check
 
 # Start KinetiC server
 ./build/src/kinetic configs/test_config.yaml
 ```
+
+---
+
+## Recommended Reading & Foundations
+
+To understand the systems engineering, socket programming, and architectural patterns powering KinetiC, the following books are strongly recommended:
+
+1. **[Beej's Guide to C Programming](https://beej.us/guide/bgc/)** — Modern C idioms, memory layout, pointers, and standard library behaviors.
+2. **[Fluent C: Principles, Practices, and Patterns](https://www.oreilly.com/library/view/fluent-c/9781492097334/)** (Christopher Preschern) — Architectural patterns, memory ownership models, error handling strategies, and zero-copy idioms in C.
+3. **[Patterns in C: Patterns, Idioms and Design Principles](https://pragprog.com/titles/atc/patterns-in-c/)** (Adam Tornhill) — Modular design, object-oriented concepts in C, state machines, and defensive invariants.
+4. **[Beej's Guide to Network Programming](https://beej.us/guide/bgnet/)** — Foundational socket programming, TCP/IP fundamentals, non-blocking I/O, and byte ordering.
+5. **[Hands-On Network Programming with C](https://www.packtpub.com/en-us/product/hands-on-network-programming-with-c-9781789349863)** (Lewis Van Winkle) — Production-grade TCP/UDP socket engineering, protocol implementation, and event multiplexing.
+6. **[Beej's Guide to UNIX IPC](https://beej.us/guide/bgipc/)** — Inter-process communication, Unix domain sockets, pipes, and multi-worker process synchronization.
 
 ---
 
