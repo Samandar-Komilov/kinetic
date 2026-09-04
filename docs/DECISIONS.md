@@ -36,7 +36,14 @@ Key design choices, security invariants, and technical decisions made in KinetiC
 * **Problem**: Abrupt socket closure causes TCP RST packets that wipe unread response bytes at the client.
 * **Decision**: Enable `uv_tcp_nodelay` to disable Nagle's algorithm for low latency, and execute staged shutdown (`uv_shutdown` write half-close followed by `uv_close`).
 
----
+### 2.2 Global Multiplexed (Non-Owned) Connection Buffer Pool
+* **Problem**: Before processing an incoming request, the server must provide libuv with a buffer (`uv_alloc_cb`) to read incoming TCP octets. Managing this memory went through three distinct design iterations:
+  1. **Iteration 1 — Malloc on Every Read Chunk**: Allocated a temporary buffer (`malloc`) on every incoming network chunk and freed it after reading.
+     * *Drawback*: Severe memory allocator churn, system call overhead, and heap fragmentation under heavy I/O.
+  2. **Iteration 2 — Connection-Owned Static Slot**: Each connection permanently held its own dedicated buffer slot for its entire lifetime.
+     * *Drawback*: Holding dedicated memory for thousands of idle/keep-alive connections wastes RAM and caps maximum concurrent connections strictly to the pool size.
+  3. **Iteration 3 (Current) — Global Multiplexed Pool with On-Demand Borrowing**: A pre-allocated global pool (`KTC_MAX_CONNECTIONS * KTC_GLOBAL_POOL_SLOT_SIZE`) where connections borrow a slot (`borrow_free_slot`) only when bytes actively arrive in `on_alloc`, and release it (`release_conn_borrowed_slot`) immediately once request parsing completes or the socket closes.
+* **Rationale**: Decouples the number of open connections from the active memory footprint, allowing high concurrency while completely eliminating per-chunk `malloc`/`free` calls.
 
 ## 3. HTTP/1.1 Request Parsing
 

@@ -45,8 +45,17 @@ build-release:
 run: build
 	./$(BINARY) $(CONFIG)
 
-test: build
+test: build ## Run all unit and integration tests
 	ctest --test-dir $(BUILD_DIR) --output-on-failure
+
+test-v: build ## Run all tests with full verbose assertion outputs
+	ctest --test-dir $(BUILD_DIR) --verbose
+
+test-u: build ## Run unit tests with detailed assertion outputs
+	ctest --test-dir $(BUILD_DIR) -L unit --verbose
+
+test-i: build ## Run integration tests with detailed assertion outputs
+	ctest --test-dir $(BUILD_DIR) -L integration --verbose
 
 format: tools
 	@$(CLANG_FORMAT) -i $(SOURCES)

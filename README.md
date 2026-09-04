@@ -25,9 +25,9 @@
 </p>
 
 <p align="center">
-  <a href="docs/STATE.md">State & Invariants</a>
+  <a href="docs/STATE.md">Project State</a>
   ·
-  <a href="docs/http1.1/INVARIANTS.md">RFC Checklist</a>
+  <a href="docs/invariants/HTTP_1_1.md">RFC Invariants Checklist</a>
   ·
   <a href="configs/example.yaml">Example config</a>
   ·
