@@ -45,8 +45,15 @@ kinetic_set_warnings(test_body)
 add_test(NAME unit_body COMMAND test_body)
 set_tests_properties(unit_body PROPERTIES LABELS "unit")
 
+add_executable(test_response unit/http/test_response.c)
+target_link_libraries(test_response PRIVATE ktc_core)
+kinetic_set_warnings(test_response)
+add_test(NAME unit_response COMMAND test_response)
+set_tests_properties(unit_response PROPERTIES LABELS "unit")
+
+
 # ---------------------------------------------------------------------------
-# Integration Tests (Phase 1 & E2E)
+# Integration Tests (Grouped by Domain)
 # ---------------------------------------------------------------------------
 add_test(
     NAME integration_connection_handling
@@ -54,3 +61,18 @@ add_test(
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
 )
 set_tests_properties(integration_connection_handling PROPERTIES LABELS "integration")
+
+add_test(
+    NAME integration_request_line
+    COMMAND python3 tests/integration/test_request_line.py
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+)
+set_tests_properties(integration_request_line PROPERTIES LABELS "integration")
+
+add_test(
+    NAME integration_headers
+    COMMAND python3 tests/integration/test_headers.py
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+)
+set_tests_properties(integration_headers PROPERTIES LABELS "integration")
+
